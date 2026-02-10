@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>デジタル教科書メーカー</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&display=swap" rel="stylesheet">
+  <!-- QR Code Library -->
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+  <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';</script>
+  <?!= include('css'); ?>
+</head>
+<body>
+  <div id="app" class="d-flex flex-column vh-100 overflow-hidden">
+    
+    <!-- Navbar -->
+    <nav class="navbar navbar-light bg-white border-bottom py-1 px-2 flex-shrink-0" style="z-index: 1000; height: 50px;">
+      <div class="container-fluid d-flex justify-content-between align-items-center">
+        <!-- Brand & Nav -->
+        <div class="d-flex align-items-center">
+          <i class="bi bi-book-half text-primary fs-4 me-2"></i>
+          
+          <!-- Page Nav -->
+          <div class="d-flex align-items-center ms-2 bg-light rounded-pill px-2 border" id="page-nav-area" style="display: none !important;">
+            <button class="btn btn-sm btn-link text-decoration-none p-0 text-dark" onclick="changePage(-1)"><i class="bi bi-caret-left-fill fs-5"></i></button>
+            <span class="mx-2 fw-bold" style="font-size: 1rem; min-width: 50px; text-align: center;">
+              <span id="current-page">1</span> / <span id="total-pages">1</span>
+            </span>
+            <button class="btn btn-sm btn-link text-decoration-none p-0 text-dark" onclick="changePage(1)"><i class="bi bi-caret-right-fill fs-5"></i></button>
+          </div>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="d-flex align-items-center gap-2" id="toolbar-area" style="display: none !important;">
+          
+          <!-- Pens & Clear -->
+          <div class="btn-group btn-group-sm shadow-sm" role="group">
+            <button type="button" class="btn btn-outline-dark" onclick="setMode('select')" title="選択"><i class="bi bi-cursor-fill"></i></button>
+            <button type="button" class="btn btn-outline-dark" onclick="setMode('pencil')" title="えんぴつ"><i class="bi bi-pencil"></i></button>
+            <button type="button" class="btn btn-outline-dark" onclick="setMode('highlighter')" title="マーカー"><i class="bi bi-brush"></i></button>
+            <button type="button" class="btn btn-outline-dark" onclick="setMode('eraser')" title="けしごむ"><i class="bi bi-eraser"></i></button>
+          </div>
+
+          <!-- Shapes & Text -->
+          <div class="btn-group btn-group-sm shadow-sm" role="group">
+            <button type="button" class="btn btn-outline-secondary" onclick="setMode('text')" title="テキスト"><i class="bi bi-fonts"></i></button>
+            <button type="button" class="btn btn-outline-secondary" onclick="showStickyCreator()" title="ふせん"><i class="bi bi-sticky"></i></button>
+            
+            <div class="btn-group btn-group-sm" role="group">
+              <button id="shapeDropdown" type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="図形">
+                <i class="bi bi-square"></i>
+              </button>
+              <ul class="dropdown-menu" aria-labelledby="shapeDropdown">
+                <li><a class="dropdown-item" href="#" onclick="setMode('line')"><i class="bi bi-slash-lg"></i> 直線</a></li>
+                <li><a class="dropdown-item" href="#" onclick="setMode('arrow')"><i class="bi bi-arrow-right"></i> 矢印</a></li>
+                <li><a class="dropdown-item" href="#" onclick="setMode('rect')"><i class="bi bi-square"></i> 四角</a></li>
+                <li><a class="dropdown-item" href="#" onclick="setMode('circle')"><i class="bi bi-circle"></i> 丸</a></li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Links -->
+          <div class="btn-group btn-group-sm shadow-sm" role="group">
+            <button type="button" class="btn btn-outline-primary" onclick="setMode('link-url')" title="Webリンク"><i class="bi bi-link-45deg"></i></button>
+            <button type="button" class="btn btn-outline-primary" onclick="setMode('link-audio')" title="音声"><i class="bi bi-volume-up-fill"></i></button>
+          </div>
+
+          <!-- Colors -->
+          <div id="color-palette" class="d-flex gap-1 bg-light p-1 rounded border align-items-center">
+            <button class="color-btn" style="background: #000000;" onclick="setColor('#000000')"></button>
+            <button class="color-btn" style="background: #FF0000;" onclick="setColor('#FF0000')"></button>
+            <button class="color-btn" style="background: #0000FF;" onclick="setColor('#0000FF')"></button>
+            <button class="color-btn" style="background: #008000;" onclick="setColor('#008000')"></button>
+            <label class="color-btn d-flex align-items-center justify-content-center" style="background: white; border: 1px solid #ccc; font-size: 10px;">
+              <i class="bi bi-palette"></i>
+              <input type="color" onchange="setColor(this.value)" style="opacity:0; position:absolute; width:100%; height:100%; cursor:pointer;">
+            </label>
+          </div>
+
+          <div class="vr mx-1"></div>
+
+          <!-- Tools -->
+          <button type="button" class="btn btn-sm btn-warning shadow-sm fw-bold text-dark" onclick="toggleStampPanel()" title="スタンプ"><i class="bi bi-emoji-smile-fill"></i></button>
+          <button type="button" class="btn btn-sm btn-info shadow-sm text-white" onclick="toggleTimerPanel()" title="タイマー"><i class="bi bi-stopwatch-fill"></i></button>
+          
+          <!-- QR Button (Changed Style) -->
+          <button type="button" class="btn btn-sm btn-outline-dark shadow-sm" onclick="setMode('qr')" title="QR読み取り"><i class="bi bi-qr-code-scan"></i></button>
+          
+          <button type="button" class="btn btn-sm btn-outline-danger" onclick="clearPage()" title="ぜんぶけす"><i class="bi bi-trash"></i></button>
+
+          <!-- Zoom -->
+          <div class="btn-group btn-group-sm shadow-sm border ms-1" role="group">
+            <button type="button" class="btn btn-light" onclick="adjustZoom(0.1)"><i class="bi bi-zoom-in"></i></button>
+            <button type="button" class="btn btn-light" onclick="resetZoom()"><i class="bi bi-aspect-ratio"></i></button>
+            <button type="button" class="btn btn-light" onclick="adjustZoom(-0.1)"><i class="bi bi-zoom-out"></i></button>
+          </div>
+          
+          <!-- Save Status -->
+          <div class="d-flex align-items-center px-2">
+            <span id="save-status" class="text-muted small fw-bold" style="font-size: 0.75rem; min-width: 80px; text-align: right;"></span>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="flex-grow-1 position-relative bg-light d-flex align-items-center justify-content-center overflow-hidden" id="main-container">
+      
+      <!-- Stamp Panel -->
+      <div id="stamp-panel" class="bg-white shadow-lg border-start d-flex flex-column side-panel">
+        <div class="p-2 border-bottom d-flex justify-content-between align-items-center bg-light">
+          <span class="fw-bold text-primary"><i class="bi bi-emoji-smile"></i> スタンプ</span>
+          <button type="button" class="btn-close" onclick="toggleStampPanel()"></button>
+        </div>
+        <ul class="nav nav-tabs nav-fill flex-nowrap overflow-auto" id="stampTabs" role="tablist">
+          <li class="nav-item"><button class="nav-link active py-1 small" data-bs-toggle="tab" data-bs-target="#tab-my">マイ</button></li>
+          <li class="nav-item"><button class="nav-link py-1 small" data-bs-toggle="tab" data-bs-target="#tab-eval">評価</button></li>
+          <li class="nav-item"><button class="nav-link py-1 small" data-bs-toggle="tab" data-bs-target="#tab-jp">国語</button></li>
+          <li class="nav-item"><button class="nav-link py-1 small" data-bs-toggle="tab" data-bs-target="#tab-math">算数</button></li>
+          <li class="nav-item"><button class="nav-link py-1 small" data-bs-toggle="tab" data-bs-target="#tab-misc">他</button></li>
+        </ul>
+        <div class="tab-content flex-grow-1 overflow-auto p-2" id="stampTabContent">
+          <div class="tab-pane fade show active" id="tab-my">
+            <button class="btn btn-outline-primary w-100 mb-3" onclick="showStampCreator()"><i class="bi bi-plus-circle"></i> 新しいスタンプを作る</button>
+            <div class="stamp-grid" id="grid-my"></div>
+            <div id="no-my-stamp-msg" class="text-center text-muted small mt-4">まだスタンプがありません</div>
+          </div>
+          <div class="tab-pane fade" id="tab-eval"><div class="stamp-grid" id="grid-eval"></div></div>
+          <div class="tab-pane fade" id="tab-jp"><div class="stamp-grid" id="grid-jp"></div></div>
+          <div class="tab-pane fade" id="tab-math"><div class="stamp-grid" id="grid-math"></div></div>
+          <div class="tab-pane fade" id="tab-misc"><div class="stamp-grid" id="grid-misc"></div></div>
+        </div>
+      </div>
+
+      <!-- Timer Panel -->
+      <div id="timer-panel" class="bg-white shadow-lg border-start d-flex flex-column side-panel">
+        <div class="p-2 border-bottom d-flex justify-content-between align-items-center bg-info bg-opacity-10">
+          <span class="fw-bold text-dark"><i class="bi bi-stopwatch-fill"></i> タイマー</span>
+          <button type="button" class="btn-close" onclick="toggleTimerPanel()"></button>
+        </div>
+        <ul class="nav nav-tabs nav-fill" role="tablist">
+          <li class="nav-item"><button class="nav-link active fw-bold" data-bs-toggle="tab" data-bs-target="#tab-countdown">タイマー</button></li>
+          <li class="nav-item"><button class="nav-link fw-bold" data-bs-toggle="tab" data-bs-target="#tab-countup">ウォッチ</button></li>
+        </ul>
+        <div class="tab-content flex-grow-1 p-3 text-center d-flex flex-column justify-content-center">
+          <div class="tab-pane fade show active w-100" id="tab-countdown">
+            <div class="timer-display mb-4" id="cd-display">05:00</div>
+            <div class="d-flex justify-content-center gap-2 mb-4 flex-wrap">
+              <button class="btn btn-sm btn-outline-secondary" onclick="addTime(1)">+1分</button>
+              <button class="btn btn-sm btn-outline-secondary" onclick="addTime(5)">+5分</button>
+              <button class="btn btn-sm btn-outline-secondary" onclick="addTime(0.166)">+10秒</button>
+              <button class="btn btn-sm btn-outline-danger" onclick="addTime(-100)">クリア</button>
+            </div>
+            <div class="d-grid gap-2">
+              <button id="cd-start-btn" class="btn btn-lg btn-primary rounded-pill shadow" onclick="toggleCountdown()"><i class="bi bi-play-fill"></i> スタート</button>
+              <button class="btn btn-outline-secondary rounded-pill" onclick="resetCountdown()">リセット</button>
+            </div>
+          </div>
+          <div class="tab-pane fade w-100" id="tab-countup">
+            <div class="timer-display mb-4" id="sw-display">00:00</div>
+            <div class="d-grid gap-2">
+              <button id="sw-start-btn" class="btn btn-lg btn-success rounded-pill shadow" onclick="toggleStopwatch()"><i class="bi bi-play-fill"></i> スタート</button>
+              <button class="btn btn-outline-secondary rounded-pill" onclick="resetStopwatch()">リセット</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stamp Creator Modal -->
+      <div id="stamp-creator-overlay" class="d-none position-absolute top-0 start-0 w-100 h-100 bg-dark bg-opacity-50 d-flex align-items-center justify-content-center" style="z-index: 2100;">
+        <div class="card shadow-lg" style="width: 320px;">
+          <div class="card-header bg-primary text-white fw-bold"><i class="bi bi-magic"></i> マイスタンプ作成</div>
+          <div class="card-body">
+            <div class="mb-3 text-center">
+              <label class="form-label small text-muted">プレビュー</label>
+              <div id="stamp-preview" class="border rounded mx-auto d-flex align-items-center justify-content-center fw-bold shadow-sm" style="width: 80px; height: 80px; font-family: 'Zen Maru Gothic'; background-color: #fff;">文字</div>
+            </div>
+            <div class="mb-3"><label class="form-label small">文字・絵文字</label><input type="text" id="stamp-text-input" class="form-control" placeholder="例: OK, 👍" maxlength="4" oninput="updateStampPreview()"></div>
+            <div class="row g-2 mb-3">
+              <div class="col-6"><label class="form-label small">文字色</label><input type="color" id="stamp-color-input" class="form-control form-control-color w-100" value="#ff0000" oninput="updateStampPreview()"></div>
+              <div class="col-6"><label class="form-label small">形</label><select id="stamp-shape-input" class="form-select" onchange="updateStampPreview()"><option value="none">なし</option><option value="circle">丸</option><option value="square">四角</option><option value="cloud">雲</option></select></div>
+            </div>
+            <div class="d-flex justify-content-between">
+              <button class="btn btn-secondary" onclick="closeStampCreator()">キャンセル</button>
+              <button class="btn btn-primary" onclick="saveMyStamp()">保存する</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sticky Note Creator Modal -->
+      <div id="sticky-creator-overlay" class="d-none position-absolute top-0 start-0 w-100 h-100 bg-dark bg-opacity-50 d-flex align-items-center justify-content-center" style="z-index: 2100;">
+        <div class="card shadow-lg" style="width: 320px;">
+          <div class="card-header bg-warning text-dark fw-bold"><i class="bi bi-sticky"></i> ふせん作成</div>
+          <div class="card-body">
+            <div class="mb-3 text-center">
+              <label class="form-label small text-muted">プレビュー</label>
+              <div id="sticky-preview" class="mx-auto d-flex align-items-center justify-content-center shadow-sm" 
+                   style="width: 120px; height: 120px; font-family: 'Zen Maru Gothic'; background-color: #fff740; border: 1px solid #d4c930; color: #000; overflow:hidden; padding: 5px; text-align: center;">
+                メモ
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label small">内容</label>
+              <textarea id="sticky-text-input" class="form-control" rows="3" placeholder="メモを入力..." oninput="updateStickyPreview()"></textarea>
+            </div>
+            <div class="mb-3">
+              <label class="form-label small">ふせんの色</label>
+              <div class="d-flex justify-content-between">
+                <div class="rounded-circle border cursor-pointer" style="width:30px; height:30px; background:#fff740;" onclick="selectStickyColor('#fff740')"></div>
+                <div class="rounded-circle border cursor-pointer" style="width:30px; height:30px; background:#ffccff;" onclick="selectStickyColor('#ffccff')"></div>
+                <div class="rounded-circle border cursor-pointer" style="width:30px; height:30px; background:#ccffff;" onclick="selectStickyColor('#ccffff')"></div>
+                <div class="rounded-circle border cursor-pointer" style="width:30px; height:30px; background:#ccffcc;" onclick="selectStickyColor('#ccffcc')"></div>
+              </div>
+              <input type="hidden" id="sticky-color-input" value="#fff740">
+            </div>
+            <div class="d-flex justify-content-between">
+              <button class="btn btn-secondary" onclick="closeStickyCreator()">キャンセル</button>
+              <button class="btn btn-primary" onclick="createStickyFromModal()">貼る</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Loading Overlay -->
+      <div id="loading-overlay" class="d-none position-absolute top-0 start-0 w-100 h-100 bg-white bg-opacity-75 d-flex flex-column justify-content-center align-items-center" style="z-index: 2000;">
+        <div class="spinner-border text-primary mb-2" role="status"></div>
+        <div id="loading-message" class="fw-bold text-primary">読み込み中...</div>
+      </div>
+
+      <!-- Setup Screen -->
+      <div id="setup-screen" class="position-absolute w-100 h-100 bg-light d-none" style="z-index: 1500; overflow-y: auto;">
+        <div class="container py-5 text-center">
+          <div class="card border-0 shadow mx-auto" style="max-width: 650px;">
+            <div class="card-header bg-white pt-4 pb-0 border-0">
+              <h2 class="text-primary fw-bold mb-3">教科書をつくろう！</h2>
+              <ul class="nav nav-tabs justify-content-center" id="setupTabs" role="tablist">
+                <li class="nav-item"><button class="nav-link active fw-bold" data-bs-toggle="tab" data-bs-target="#pdf-content">PDFから</button></li>
+                <li class="nav-item"><button class="nav-link fw-bold" data-bs-toggle="tab" data-bs-target="#drive-content">Googleドライブから</button></li>
+              </ul>
+            </div>
+            <div class="card-body p-4 bg-white">
+              <div id="admin-init-area" class="mb-4 d-none"><button class="btn btn-lg btn-secondary w-100" onclick="initializeSystem()">システム初期化</button></div>
+              <div class="tab-content">
+                <div class="tab-pane fade show active" id="pdf-content">
+                  <div class="py-4">
+                    <!-- Icon revived -->
+                    <div class="mb-3"><i class="bi bi-file-earmark-pdf text-danger" style="font-size: 4rem;"></i></div>
+                    <p class="text-muted">パソコンのPDFを選んでください。</p>
+                    <label class="btn btn-lg btn-primary w-100 py-3 rounded-pill shadow-sm"><i class="bi bi-upload me-2"></i>PDFを選択<input type="file" accept="application/pdf" hidden onchange="handlePdfSelect(this)"></label>
+                  </div>
+                  <div id="progress-area" class="d-none mt-3">
+                    <p class="fw-bold text-primary mb-1">作成中... <span id="progress-text">0/0</span></p>
+                    <div class="progress"><div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%"></div></div>
+                  </div>
+                </div>
+                <div class="tab-pane fade" id="drive-content">
+                  <div class="py-4">
+                    <!-- Icon revived -->
+                    <div class="mb-3"><i class="bi bi-folder2-open text-primary" style="font-size: 4rem;"></i></div>
+                    <p class="text-muted">フォルダのURLを貼り付けてください。</p>
+                    <div class="input-group mb-3"><span class="input-group-text"><i class="bi bi-link"></i></span><input type="text" id="drive-url-input" class="form-control" placeholder="https://drive.google.com/..."></div>
+                    <button class="btn btn-lg btn-success w-100 rounded-pill" onclick="handleDriveImport()">インポート</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Viewer Screen -->
+      <div id="viewer-screen" class="d-none w-100 h-100 d-flex align-items-center justify-content-center bg-secondary">
+        <div id="canvas-wrapper" class="shadow bg-white position-relative" style="transform-origin: center center;">
+          <div id="slide-background" class="position-absolute top-0 start-0 w-100 h-100" style="z-index: 0; background-size: contain; background-repeat: no-repeat; background-position: center;"></div>
+          <canvas id="c"></canvas>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <?!= include('js'); ?>
+</body>
+</html>
