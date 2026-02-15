@@ -25,12 +25,13 @@ function doGet(e) {
   return HtmlService.createTemplateFromFile('index')
     .evaluate()
     .setTitle(APP_NAME)
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
-// 初期化処理
+// 初期化処理 (Updated: Return Object structure)
 function initializeApp() {
+  // 既存のシートIDがある場合は削除扱いとせず、新規作成する（上書き）
   const ss = SpreadsheetApp.create(APP_NAME + '_DB');
   const sheet = ss.getSheets()[0];
   sheet.setName(SHEET_NAME_DATA);
@@ -45,12 +46,49 @@ function initializeApp() {
   props.setProperty('SPREADSHEET_ID', ss.getId());
   props.setProperty('IS_INITIALIZED', 'true');
 
-  return { url: ss.getUrl() };
+  return { url: ss.getUrl(), ss: ss, id: ss.getId() };
+}
+
+// Helper: DB接続・自動復旧
+function getOrResetDatabase() {
+  const props = PropertiesService.getScriptProperties();
+  const ssId = props.getProperty('SPREADSHEET_ID');
+  
+  if (ssId) {
+    try {
+      const ss = SpreadsheetApp.openById(ssId);
+      // シートが存在するか確認（念のため）
+      if (!ss.getSheetByName(SHEET_NAME_DATA)) {
+        throw new Error('Data sheet missing');
+      }
+      return ss;
+    } catch (e) {
+      console.warn('DB Spreadsheet missing or inaccessible. Re-initializing...', e);
+    }
+  }
+  
+  // Create new if missing or open failed
+  return initializeApp().ss;
 }
 
 function getAppState() {
   const props = PropertiesService.getScriptProperties();
   const isInitialized = props.getProperty('IS_INITIALIZED');
+  
+  // Check if DB actually exists, even if initialized property says true
+  if (isInitialized) {
+    try {
+      const ssId = props.getProperty('SPREADSHEET_ID');
+      SpreadsheetApp.openById(ssId);
+    } catch (e) {
+      // If DB is missing, treat as not initialized or just broken.
+      // For now, let's treat it as initialized but we will auto-heal later.
+      // However, if the user wants to see "Setup" screen, we might return false.
+      // But user typically wants to just use the app.
+      // Let's rely on getInitialData to heal it.
+    }
+  }
+
   if (!isInitialized) return { isInitialized: false };
 
   const pres = SlidesApp.getActivePresentation();
@@ -78,10 +116,10 @@ function getInitialData() {
     return fill ? fill.getContentUrl() : null;
   });
 
-  const props = PropertiesService.getScriptProperties();
-  const ssId = props.getProperty('SPREADSHEET_ID');
-  const ss = SpreadsheetApp.openById(ssId);
+  // Use auto-healing DB accessor
+  const ss = getOrResetDatabase();
   const sheet = ss.getSheetByName(SHEET_NAME_DATA);
+  
   const data = sheet.getDataRange().getValues();
   
   const drawings = {};
@@ -89,7 +127,7 @@ function getInitialData() {
     const pIndex = data[i][0];
     const json = data[i][1];
     const deleted = data[i][3];
-    if (deleted === '') {
+    if (!deleted) {
       drawings[pIndex] = json;
     }
   }
@@ -188,11 +226,28 @@ function setupSlideFromDriveFolder(folderUrlOrId) {
 }
 
 function savePageData(pageIndex, json) {
-  const props = PropertiesService.getScriptProperties();
-  const ssId = props.getProperty('SPREADSHEET_ID');
-  const ss = SpreadsheetApp.openById(ssId);
+  // Use auto-healing DB accessor
+  const ss = getOrResetDatabase();
   const sheet = ss.getSheetByName(SHEET_NAME_DATA);
   const now = new Date();
-  sheet.appendRow([pageIndex, json, now, '']);
+  
+  // Upsert: 既存行を検索して更新、なければ追加
+  const data = sheet.getDataRange().getValues();
+  let existingRow = -1;
+  // 後ろから検索して最新の同一ページ行を見つける
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (data[i][0] === pageIndex && !data[i][3]) {
+      existingRow = i + 1; // 1-indexed
+      break;
+    }
+  }
+  
+  if (existingRow > 0) {
+    // 既存行を更新
+    sheet.getRange(existingRow, 2, 1, 2).setValues([[json, now]]);
+  } else {
+    // 新規追加
+    sheet.appendRow([pageIndex, json, now, '']);
+  }
   return { success: true };
 }
