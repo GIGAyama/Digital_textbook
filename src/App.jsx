@@ -416,6 +416,7 @@ export default function App() {
   const [textbooks, setTextbooks] = useState([]);
   const [currentTextbookId, setCurrentTextbookId] = useState(null);
   const [currentPage, setCurrentPage] = useState(0);
+  const [pageHistory, setPageHistory] = useState({});
   const [isProcessing, setIsProcessing] = useState(false);
 
   const currentTextbook = textbooks.find(tb => tb.id === currentTextbookId);
@@ -482,57 +483,78 @@ export default function App() {
     setShowStampMenu(false); setShowShapeMenu(false); setShowStickyMenu(false); setShowLinkMenu(false); setShowPageJump(false);
   }, []);
 
-  const scanQRCode = useCallback((rect) => {
-    if (!fabricRef.current || !window.jsQR || !currentPages[currentPage]) return;
+  const scanQRCode = useCallback(async (rect) => {
+    if (!fabricRef.current || !currentPages[currentPage]) return;
     showToast("QRコードを解析中...", "info");
     
-    // キャンバスの表示用画像ではなく、高解像度のPDF元画像を直接使用する
     const img = new Image();
-    img.onload = () => {
-      const memCanvas = document.createElement('canvas');
-      memCanvas.width = img.width; memCanvas.height = img.height;
-      const ctx = memCanvas.getContext('2d');
-      ctx.drawImage(img, 0, 0);
-      
-      // キャンバスの論理サイズと、高解像度画像のサイズの比率を計算
+    img.crossOrigin = "Anonymous";
+    img.onload = async () => {
       const canvasW = fabricRef.current.width;
       const canvasH = fabricRef.current.height;
       const scaleX = img.width / canvasW;
       const scaleY = img.height / canvasH;
       
-      // 囲んだ枠より少し広めに切り抜く（精度向上のため）
       const padding = 50; 
       let sx = Math.max(0, (rect.left * scaleX) - padding);
       let sy = Math.max(0, (rect.top * scaleY) - padding);
       let sw = Math.min(img.width - sx, (rect.width * scaleX) + padding * 2);
       let sh = Math.min(img.height - sy, (rect.height * scaleY) + padding * 2);
-      
-      let imageData;
-      try {
-        imageData = ctx.getImageData(sx, sy, sw, sh);
-      } catch(e) {
-        showToast("画像解析エラーが発生しました", "error");
-        return;
+
+      // まずはモダンな BarcodeDetector を試す（高速かつ高精度）
+      if ('BarcodeDetector' in window) {
+        try {
+          const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+          const cropCanvas = document.createElement('canvas');
+          cropCanvas.width = sw; cropCanvas.height = sh;
+          const cropCtx = cropCanvas.getContext('2d');
+          cropCtx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+          
+          const barcodes = await detector.detect(cropCanvas);
+          if (barcodes.length > 0) {
+            window.open(barcodes[0].rawValue, '_blank');
+            showToast("QRコードを読み取りました", "success");
+            setMode('select');
+            return;
+          }
+          // 見つからなければ全体も試す
+          const allBarcodes = await detector.detect(img);
+          if (allBarcodes.length > 0) {
+             window.open(allBarcodes[0].rawValue, '_blank');
+             showToast("QRコードを読み取りました", "success");
+             setMode('select');
+             return;
+          }
+        } catch (e) { console.warn("BarcodeDetector failed", e); }
       }
-      
-      // 1. 指定範囲でQR解析
-      let code = window.jsQR(imageData.data, imageData.width, imageData.height);
-      
-      // 2. もし見つからなければ、ページ全体からQRコードを探す（フォールバック）
-      if (!code) {
-        imageData = ctx.getImageData(0, 0, img.width, img.height);
-        code = window.jsQR(imageData.data, imageData.width, imageData.height);
-      }
-      
-      if (code && code.data) {
-        window.open(code.data, '_blank');
-        showToast("QRコードを読み取りました", "success");
-        setMode('select');
+
+      // フォールバック: jsQRによる解析
+      if (window.jsQR) {
+        const memCanvas = document.createElement('canvas');
+        memCanvas.width = img.width; memCanvas.height = img.height;
+        const ctx = memCanvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        
+        let imageData;
+        try { imageData = ctx.getImageData(sx, sy, sw, sh); } catch(e) { return showToast("画像解析エラー", "error"); }
+        
+        let code = window.jsQR(imageData.data, imageData.width, imageData.height);
+        if (!code) {
+          imageData = ctx.getImageData(0, 0, img.width, img.height);
+          code = window.jsQR(imageData.data, imageData.width, imageData.height);
+        }
+        
+        if (code && code.data) {
+          window.open(code.data, '_blank');
+          showToast("QRコードを読み取りました", "success");
+          setMode('select');
+        } else {
+          showToast("QRコードが見つかりません。もう少し広く囲むか、鮮明なPDFを使用してください。", "error");
+        }
       } else {
-        showToast("QRコードが見つかりません。もう少し広く囲むか、鮮明なPDFを使用してください。", "error");
+         showToast("QRコード解析ライブラリが読み込まれていません", "error");
       }
     };
-    // 元のPDF画像をセットして読み込み開始
     img.src = currentPages[currentPage];
   }, [showToast, currentPages, currentPage]);
 
@@ -555,17 +577,19 @@ export default function App() {
         if (savedBooks) setTextbooks(savedBooks);
         if (savedDrawings) drawingsRef.current = savedDrawings;
         
+        // 各教科書のページ履歴のロード
+        const savedHistory = localStorage.getItem('digital_textbook_page_history');
+        let parsedHistory = {};
+        if (savedHistory) {
+          try { parsedHistory = JSON.parse(savedHistory); setPageHistory(parsedHistory); } catch(e){}
+        }
+
         // 前回開いていた状態の復元
         if (savedBooks && savedBooks.length > 0) {
-          const lastOpened = localStorage.getItem(DB_KEY_LAST_OPENED);
-          if (lastOpened) {
-            try {
-              const { textbookId, page } = JSON.parse(lastOpened);
-              if (savedBooks.find(tb => tb.id === textbookId)) {
-                setCurrentTextbookId(textbookId);
-                setCurrentPage(page || 0);
-              }
-            } catch(e){}
+          const lastOpenedId = localStorage.getItem(DB_KEY_LAST_OPENED);
+          if (lastOpenedId && savedBooks.find(tb => tb.id === lastOpenedId)) {
+            setCurrentTextbookId(lastOpenedId);
+            setCurrentPage(parsedHistory[lastOpenedId] || 0);
           }
         }
       } catch (e) { console.error("データ読み込み失敗", e); } 
@@ -576,12 +600,18 @@ export default function App() {
 
   // 開いている教科書・ページの保存
   useEffect(() => {
+    if (!isDataLoaded) return;
     if (currentTextbookId !== null) {
-      localStorage.setItem(DB_KEY_LAST_OPENED, JSON.stringify({ textbookId: currentTextbookId, page: currentPage }));
+      localStorage.setItem(DB_KEY_LAST_OPENED, currentTextbookId);
+      setPageHistory(prev => {
+        const next = { ...prev, [currentTextbookId]: currentPage };
+        localStorage.setItem('digital_textbook_page_history', JSON.stringify(next));
+        return next;
+      });
     } else {
       localStorage.removeItem(DB_KEY_LAST_OPENED);
     }
-  }, [currentTextbookId, currentPage]);
+  }, [currentTextbookId, currentPage, isDataLoaded]);
 
   // --- P2P Share Logic ---
   // 受信側の処理（URLに ?host=ID がある場合）
@@ -909,9 +939,12 @@ export default function App() {
       });
     }
 
+    let isCancelled = false; // 描画の競合(上書き)を防ぐためのフラグ
+
     // Load Background & Data
     const canvas = fabricRef.current;
     window.fabric.Image.fromURL(currentPages[currentPage], (img) => {
+      if (isCancelled) return;
       const containerWidth = containerRef.current?.clientWidth || window.innerWidth - 40;
       const containerHeight = containerRef.current?.clientHeight || window.innerHeight - 200;
       const scale = Math.min(containerWidth / img.width, containerHeight / img.height) * 0.95; 
@@ -936,6 +969,7 @@ export default function App() {
 
       if (drawingsRef.current[currentTextbookId]?.[currentPage]) {
         canvas.loadFromJSON(drawingsRef.current[currentTextbookId][currentPage], () => {
+          if (isCancelled) return;
           canvas.renderAll();
           loadData();
         });
@@ -945,6 +979,10 @@ export default function App() {
         loadData();
       }
     });
+
+    return () => {
+      isCancelled = true;
+    };
   }, [scriptsLoaded, isDataLoaded, currentTextbookId, currentPages, currentPage, saveHistory, triggerAutoSave]);
 
   // --- Tool Modes ---
@@ -1204,7 +1242,7 @@ export default function App() {
                 )}
               </label>
               {textbooks.map(tb => (
-                <div key={tb.id} onClick={() => { setCurrentTextbookId(tb.id); setCurrentPage(0); setZoom(1); }} className="bg-white rounded-3xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group relative overflow-hidden flex flex-col border border-slate-100 min-h-[260px]">
+                <div key={tb.id} onClick={() => { setCurrentTextbookId(tb.id); setCurrentPage(pageHistory[tb.id] || 0); setZoom(1); }} className="bg-white rounded-3xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group relative overflow-hidden flex flex-col border border-slate-100 min-h-[260px]">
                   <div className="h-44 bg-slate-100 relative border-b border-slate-100 flex items-center justify-center p-3 overflow-hidden">
                     <img src={tb.coverImage} alt={tb.title} className="max-h-full max-w-full object-contain drop-shadow-md group-hover:scale-105 transition-transform duration-300" />
                     <button onClick={(e) => deleteTextbook(tb.id, e)} className="absolute top-3 right-3 bg-white/90 backdrop-blur hover:bg-red-50 text-slate-400 hover:text-red-500 p-2.5 rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-md"><Trash2 size={20} /></button>
