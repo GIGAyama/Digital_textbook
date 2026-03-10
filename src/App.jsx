@@ -483,80 +483,80 @@ export default function App() {
     setShowStampMenu(false); setShowShapeMenu(false); setShowStickyMenu(false); setShowLinkMenu(false); setShowPageJump(false);
   }, []);
 
+  // 【修正】枠で囲んだ範囲のデータを引数(rect)として受け取る
   const scanQRCode = useCallback(async (rect) => {
-    if (!fabricRef.current || !currentPages[currentPage]) return;
+    if (!fabricRef.current) return;
     showToast("QRコードを解析中...", "info");
-    
+
+    // キャンバスの見た目を高解像度で画像化 (書き込み等も含めてスキャン可能に)
+    const dataURL = fabricRef.current.toDataURL({
+      format: 'png',
+      multiplier: 2
+    });
+
     const img = new Image();
-    img.crossOrigin = "Anonymous";
+    img.src = dataURL;
+    
     img.onload = async () => {
+      let decodedUrl = null;
+
+      // キャンバスの論理サイズと、高解像度画像(multiplier:2)のサイズの比率を計算
       const canvasW = fabricRef.current.width;
       const canvasH = fabricRef.current.height;
       const scaleX = img.width / canvasW;
       const scaleY = img.height / canvasH;
       
-      const padding = 50; 
+      // ユーザーが囲んだ枠の座標を高解像度画像上の座標に変換し、少し広めに(padding)切り抜く
+      const padding = 60; 
       let sx = Math.max(0, (rect.left * scaleX) - padding);
       let sy = Math.max(0, (rect.top * scaleY) - padding);
       let sw = Math.min(img.width - sx, (rect.width * scaleX) + padding * 2);
       let sh = Math.min(img.height - sy, (rect.height * scaleY) + padding * 2);
 
-      // まずはモダンな BarcodeDetector を試す（高速かつ高精度）
+      const memCanvas = document.createElement('canvas');
+      memCanvas.width = sw;
+      memCanvas.height = sh;
+      const ctx = memCanvas.getContext('2d');
+      // 高解像度画像から、指定範囲だけを描画（切り抜き）
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+
+      // 1. 最新の BarcodeDetector を試す (高速・高精度)
       if ('BarcodeDetector' in window) {
         try {
           const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
-          const cropCanvas = document.createElement('canvas');
-          cropCanvas.width = sw; cropCanvas.height = sh;
-          const cropCtx = cropCanvas.getContext('2d');
-          cropCtx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
-          
-          const barcodes = await detector.detect(cropCanvas);
+          // 切り抜いた範囲のキャンバスを解析
+          const barcodes = await detector.detect(memCanvas);
           if (barcodes.length > 0) {
-            window.open(barcodes[0].rawValue, '_blank');
-            showToast("QRコードを読み取りました", "success");
-            setMode('select');
-            return;
+            decodedUrl = barcodes[0].rawValue;
           }
-          // 見つからなければ全体も試す
-          const allBarcodes = await detector.detect(img);
-          if (allBarcodes.length > 0) {
-             window.open(allBarcodes[0].rawValue, '_blank');
-             showToast("QRコードを読み取りました", "success");
-             setMode('select');
-             return;
-          }
-        } catch (e) { console.warn("BarcodeDetector failed", e); }
+        } catch (e) {
+          console.warn("BarcodeDetector failed:", e);
+        }
       }
 
-      // フォールバック: jsQRによる解析
-      if (window.jsQR) {
-        const memCanvas = document.createElement('canvas');
-        memCanvas.width = img.width; memCanvas.height = img.height;
-        const ctx = memCanvas.getContext('2d');
-        ctx.drawImage(img, 0, 0);
-        
-        let imageData;
-        try { imageData = ctx.getImageData(sx, sy, sw, sh); } catch(e) { return showToast("画像解析エラー", "error"); }
-        
-        let code = window.jsQR(imageData.data, imageData.width, imageData.height);
-        if (!code) {
-          imageData = ctx.getImageData(0, 0, img.width, img.height);
-          code = window.jsQR(imageData.data, imageData.width, imageData.height);
+      // 2. BarcodeDetector で見つからなかった場合、jsQR でフォールバック
+      if (!decodedUrl && window.jsQR) {
+        try {
+          const imageData = ctx.getImageData(0, 0, sw, sh);
+          const code = window.jsQR(imageData.data, imageData.width, imageData.height);
+          if (code && code.data) {
+            decodedUrl = code.data;
+          }
+        } catch(e) {
+          console.error("jsQR error:", e);
         }
-        
-        if (code && code.data) {
-          window.open(code.data, '_blank');
-          showToast("QRコードを読み取りました", "success");
-          setMode('select');
-        } else {
-          showToast("QRコードが見つかりません。もう少し広く囲むか、鮮明なPDFを使用してください。", "error");
-        }
+      }
+
+      // 結果の処理
+      if (decodedUrl) {
+        window.open(decodedUrl, '_blank');
+        showToast("QRコードを読み取りました", "success");
+        setMode('select');
       } else {
-         showToast("QRコード解析ライブラリが読み込まれていません", "error");
+        showToast("選択範囲にQRコードが見つかりません。もう少し広く囲むか、PDFの画質を確認してください。", "error");
       }
     };
-    img.src = currentPages[currentPage];
-  }, [showToast, currentPages, currentPage]);
+  }, [showToast]);
 
   // --- Initialization ---
   useEffect(() => {
@@ -847,7 +847,16 @@ export default function App() {
 
   // --- Fabric.js Setup ---
   useEffect(() => {
-    if (!scriptsLoaded || !isDataLoaded || !currentTextbookId || currentPages.length === 0) return;
+    // 【追加】一覧画面に戻った際（currentTextbookId === null）に、古いキャンバスのインスタンスを確実に破棄する
+    if (!currentTextbookId) {
+      if (fabricRef.current) {
+        fabricRef.current.dispose();
+        fabricRef.current = null;
+      }
+      return;
+    }
+
+    if (!scriptsLoaded || !isDataLoaded || currentPages.length === 0) return;
 
     if (!fabricRef.current && canvasRef.current) {
       fabricRef.current = new window.fabric.Canvas(canvasRef.current, { isDrawingMode: true, selection: true, preserveObjectStacking: true });
@@ -883,6 +892,7 @@ export default function App() {
         if (cMode === 'eraser' && o.target && o.target !== canvas.backgroundImage) {
           canvas.remove(o.target);
         } else if (cMode === 'qr') {
+          // 【修正】QRモード開始時、青い半透明の選択枠を作成
           startPoint = ptr;
           activeShape = new window.fabric.Rect({
             left: ptr.x, top: ptr.y, width: 0, height: 0,
@@ -918,11 +928,16 @@ export default function App() {
            activeShape.isTemp = false; // 確定
            const cMode = modeRef.current;
            if (cMode === 'qr') {
+             // 【修正】マウスを離した時点で枠の座標を取得し、キャンバスから枠を消してから解析に回す
              const rectData = { left: activeShape.left, top: activeShape.top, width: activeShape.width, height: activeShape.height };
              fabricRef.current.remove(activeShape);
              activeShape = null; startPoint = null;
              fabricRef.current.requestRenderAll();
-             if (rectData.width > 10 && rectData.height > 10) scanQRCode(rectData);
+             
+             // 枠が小さすぎる（単なるクリック）場合は無視、ある程度囲んでいれば解析実行
+             if (rectData.width > 10 && rectData.height > 10) {
+               scanQRCode(rectData);
+             }
              return;
            } else if (cMode === 'arrow') {
              const x1 = activeShape.x1, y1 = activeShape.y1, x2 = activeShape.x2, y2 = activeShape.y2;
