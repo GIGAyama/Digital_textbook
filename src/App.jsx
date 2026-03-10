@@ -904,7 +904,11 @@ export default function App() {
       fabricRef.current.on('object:added', (e) => { 
         if(e.target && !e.target.isTemp) { saveHistory(); triggerAutoSave(); }
       });
-      fabricRef.current.on('object:removed', () => { saveHistory(); triggerAutoSave(); });
+      fabricRef.current.on('object:removed', (e) => { 
+        // テンポラリの枠が削除された場合は保存をトリガーしない
+        if(e.target && e.target.isTemp) return;
+        saveHistory(); triggerAutoSave(); 
+      });
 
       // Interactions (Links & Text)
       fabricRef.current.on('mouse:dblclick', (o) => {
@@ -920,8 +924,14 @@ export default function App() {
       let startPoint = null;
 
       fabricRef.current.on('mouse:down', (o) => {
-        isMouseDown = true;
         const canvas = fabricRef.current;
+        // 前回の中断された枠が残っていれば確実に削除する
+        if (activeShape) {
+          canvas.remove(activeShape);
+          activeShape = null;
+        }
+        
+        isMouseDown = true;
         const ptr = canvas.getPointer(o.e);
         const cMode = modeRef.current;
 
@@ -932,12 +942,16 @@ export default function App() {
           activeShape = new window.fabric.Rect({
             left: ptr.x, top: ptr.y, width: 0, height: 0,
             fill: 'rgba(59, 130, 246, 0.2)', stroke: '#3b82f6', strokeWidth: 2,
-            selectable: false, evented: false, isTemp: true
+            selectable: false, evented: false, 
+            isTemp: true, excludeFromExport: true // 保存対象から確実に除外
           });
           canvas.add(activeShape);
         } else if (['rect', 'circle', 'line', 'arrow'].includes(cMode)) {
           startPoint = ptr;
-          const strokeOpts = { stroke: colorRef.current, strokeWidth: 4, fill: 'transparent', isTemp: true };
+          const strokeOpts = { 
+            stroke: colorRef.current, strokeWidth: 4, fill: 'transparent', 
+            isTemp: true, excludeFromExport: true 
+          };
           
           if (cMode === 'rect') activeShape = new window.fabric.Rect({ left: ptr.x, top: ptr.y, width: 0, height: 0, ...strokeOpts });
           else if (cMode === 'circle') activeShape = new window.fabric.Ellipse({ left: ptr.x, top: ptr.y, rx: 0, ry: 0, ...strokeOpts });
@@ -964,20 +978,32 @@ export default function App() {
            const cMode = modeRef.current;
            if (cMode === 'qr') {
              const rectData = activeShape ? { left: activeShape.left, top: activeShape.top, width: activeShape.width, height: activeShape.height } : null;
-             if (activeShape) fabricRef.current.remove(activeShape);
-             activeShape = null; startPoint = null;
-             fabricRef.current.requestRenderAll();
              
-             scanQRCode(rectData);
+             // QRの選択枠をキャンバスから完全に削除し、即座に画面を再描画する
+             if (activeShape) {
+               fabricRef.current.remove(activeShape);
+               fabricRef.current.requestRenderAll(); // ここで画面を更新して枠を消す
+             }
+             
+             activeShape = null; 
+             startPoint = null;
+             
+             // 枠が消えた後にスキャン処理を開始
+             setTimeout(() => {
+                scanQRCode(rectData);
+             }, 10); // 描画の反映を待つためにわずかに遅延させる
              return;
            } else if (cMode === 'arrow') {
              const x1 = activeShape.x1, y1 = activeShape.y1, x2 = activeShape.x2, y2 = activeShape.y2;
              const angle = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
              const head = new window.fabric.Triangle({ left: x2, top: y2, width: 20, height: 20, fill: colorRef.current, originX: 'center', originY: 'center', angle: angle + 90 });
-             const group = new window.fabric.Group([activeShape, head]);
+             const group = new window.fabric.Group([activeShape, head], { excludeFromExport: false });
              fabricRef.current.remove(activeShape);
              fabricRef.current.add(group);
-           } else { activeShape.setCoords(); }
+           } else { 
+             activeShape.excludeFromExport = false; // 通常の図形は保存対象に戻す
+             activeShape.setCoords(); 
+           }
            saveHistory();
            triggerAutoSave();
         }
@@ -991,9 +1017,9 @@ export default function App() {
     const canvas = fabricRef.current;
     window.fabric.Image.fromURL(currentPages[currentPage], (img) => {
       if (isCancelled) return;
-      const containerWidth = containerRef.current?.clientWidth || window.innerWidth - 40;
-      const containerHeight = containerRef.current?.clientHeight || window.innerHeight - 200;
-      const scale = Math.min(containerWidth / img.width, containerHeight / img.height) * 0.95; 
+      const containerWidth = containerRef.current?.clientWidth || window.innerWidth;
+      const containerHeight = containerRef.current?.clientHeight || window.innerHeight;
+      const scale = Math.min(containerWidth / img.width, containerHeight / img.height); 
       const renderWidth = img.width * scale;
       const renderHeight = img.height * scale;
 
@@ -1208,14 +1234,20 @@ export default function App() {
 
       switch (e.key) {
         case 'ArrowRight':
-        case 'ArrowDown':
           e.preventDefault();
           changePage(1);
           break;
         case 'ArrowLeft':
-        case 'ArrowUp':
           e.preventDefault();
           changePage(-1);
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          setZoom(prev => Math.min(3, prev + 0.2));
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          setZoom(prev => Math.max(0.5, prev - 0.2));
           break;
         case 'Delete':
         case 'Backspace':
@@ -1242,7 +1274,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentTextbookId, changePage, handleUndo, handleRedo]);
+  }, [currentTextbookId, changePage, handleUndo, handleRedo, saveHistory, triggerAutoSave]);
 
   // ==========================================
   // レンダリング
@@ -1447,7 +1479,7 @@ export default function App() {
           </div>
 
           {/* キャンバスエリア */}
-          <main ref={containerRef} className="flex-grow overflow-auto relative bg-slate-200/80 flex items-center justify-center p-6" onClick={closeAllMenus}>
+          <main ref={containerRef} className="flex-grow overflow-auto relative bg-slate-200/80 flex items-center justify-center" onClick={closeAllMenus}>
             <div className="bg-white shadow-xl transition-transform duration-200 origin-center rounded-sm" style={{ transform: `scale(${zoom})` }}>
               <canvas ref={canvasRef} />
             </div>
@@ -1590,11 +1622,19 @@ export default function App() {
               <div className="grid grid-cols-2 gap-y-4 gap-x-8 text-sm">
                 <div className="flex justify-between items-center border-b border-slate-100 pb-2">
                   <span className="text-slate-600 font-bold">次のページ</span>
-                  <kbd className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded-lg font-mono font-bold text-xs">→ / ↓</kbd>
+                  <kbd className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded-lg font-mono font-bold text-xs">→</kbd>
                 </div>
                 <div className="flex justify-between items-center border-b border-slate-100 pb-2">
                   <span className="text-slate-600 font-bold">前のページ</span>
-                  <kbd className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded-lg font-mono font-bold text-xs">← / ↑</kbd>
+                  <kbd className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded-lg font-mono font-bold text-xs">←</kbd>
+                </div>
+                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                  <span className="text-slate-600 font-bold">拡大 (ズームイン)</span>
+                  <kbd className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded-lg font-mono font-bold text-xs">↑</kbd>
+                </div>
+                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                  <span className="text-slate-600 font-bold">縮小 (ズームアウト)</span>
+                  <kbd className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded-lg font-mono font-bold text-xs">↓</kbd>
                 </div>
                 <div className="flex justify-between items-center border-b border-slate-100 pb-2">
                   <span className="text-slate-600 font-bold">元に戻す</span>
