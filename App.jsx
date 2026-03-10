@@ -1,0 +1,1626 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { 
+  Pencil, Eraser, Trash2, ChevronLeft, ChevronRight, Smile, Type, 
+  ZoomIn, ZoomOut, MousePointer2, Book, BookOpen, Plus,
+  Highlighter, Square, Circle, Minus, ArrowRight,
+  StickyNote, Timer, Play, Pause, RotateCcw,
+  Link as LinkIcon, Volume2, Settings, X,
+  Undo2, Redo2, AlertCircle, CheckCircle2, Info, QrCode,
+  Share2, Copy, Loader2
+} from 'lucide-react';
+
+// ==========================================
+// 1. 定数・データ定義
+// ==========================================
+
+const APP_NAME = "デジタル教科書メーカー";
+const DEVELOPER_NAME = "GIGA山";
+const SNS_LINK = "https://note.com/cute_borage86";
+
+const DB_KEY_TEXTBOOKS = "digital_textbooks_v3";
+const DB_KEY_DRAWINGS = "digital_textbook_drawings_v3";
+const DB_KEY_MYSTAMPS = "digital_textbook_mystamps";
+const DB_KEY_LAST_OPENED = "digital_textbook_last_opened";
+
+// スタンプのカテゴリとデータ
+const STAMP_CATEGORIES = [
+  { id: 'eval', name: '評価' },
+  { id: 'jp', name: '国語' },
+  { id: 'math', name: '算数' },
+  { id: 'eng', name: '英語' },
+  { id: 'social', name: '理社' },
+  { id: 'life', name: '生活' },
+  { id: 'my', name: 'マイ' },
+];
+
+const STAMPS_DATA = {
+  'eval': [
+    { label: 'はなまる', icon: '💮', color: 'red', type: 'text' },
+    { label: '100点', icon: '💯', color: 'red', type: 'text' },
+    { label: '二重丸', icon: '◎', color: 'red', type: 'text' },
+    { label: 'まる', icon: '〇', color: 'red', type: 'text' },
+    { label: 'チェック', icon: '✔', color: 'red', type: 'text' },
+    { label: 'いいね', icon: '👍', color: '#1a73e8', type: 'text' },
+    { label: '見ました', icon: '👀', color: 'green', type: 'text' },
+    { label: 'OK', icon: '🆗', color: 'orange', type: 'text' },
+    { label: '合格', icon: '🈴', color: 'red', type: 'text' },
+    { label: '満点', icon: '🈵', color: 'red', type: 'text' },
+    { label: 'すごい', icon: '✨', color: '#F1C40F', type: 'text' },
+    { label: 'ナイス', icon: '👏', color: '#E67E22', type: 'text' }
+  ],
+  'jp': [
+    { label: 'いつ', text: 'い\nつ', type: 'vertical', color: 'blue' },
+    { label: 'どこで', text: 'ど\nこ\nで', type: 'vertical', color: 'blue' },
+    { label: 'だれが', text: 'だ\nれ\nが', type: 'vertical', color: 'blue' },
+    { label: 'なにを', text: 'な\nに\nを', type: 'vertical', color: 'blue' },
+    { label: 'なぜ', text: 'な\nぜ', type: 'vertical', color: 'blue' },
+    { label: 'どのように', text: 'ど\nの\nよ\nう\nに', type: 'vertical', color: 'blue' },
+    { label: 'はじめ', text: 'は\nじ\nめ', type: 'vertical', color: 'black' },
+    { label: '中', text: '中', type: 'vertical', color: 'black' },
+    { label: 'おわり', text: 'お\nわ\nり', type: 'vertical', color: 'black' },
+    { label: '序論', text: '序\n論', type: 'vertical', color: 'black' },
+    { label: '本論', text: '本\n論', type: 'vertical', color: 'black' },
+    { label: '結論', text: '結\n論', type: 'vertical', color: 'black' },
+    { label: '問題', text: '問\n題', type: 'vertical', color: 'blue' },
+    { label: '考え', text: '筆\n者\nの\n考\nえ', type: 'vertical', color: 'red' },
+    { label: 'まとめ', text: 'ま\nと\nめ', type: 'vertical', color: 'black' },
+    { label: '主語', text: '主\n語', type: 'vertical', color: 'green' },
+    { label: '述語', text: '述\n語', type: 'vertical', color: 'green' },
+    { label: '怒り', icon: '💢', color: 'red', type: 'text' },
+    { label: '喜び', icon: '😆', color: 'orange', type: 'text' },
+    { label: '悲しみ', icon: '😭', color: 'blue', type: 'text' },
+    { label: '驚き', icon: '❗', color: 'red', type: 'text' },
+    { label: '①', icon: '①', color: 'black', type: 'text' },
+    { label: '②', icon: '②', color: 'black', type: 'text' },
+    { label: '③', icon: '③', color: 'black', type: 'text' },
+    { label: '④', icon: '④', color: 'black', type: 'text' },
+    { label: '⑤', icon: '⑤', color: 'black', type: 'text' },
+    { label: '⑥', icon: '⑥', color: 'black', type: 'text' },
+    { label: '⑦', icon: '⑦', color: 'black', type: 'text' },
+    { label: '⑧', icon: '⑧', color: 'black', type: 'text' },
+    { label: '⑨', icon: '⑨', color: 'black', type: 'text' },
+    { label: '⑩', icon: '⑩', color: 'black', type: 'text' },
+    { label: '⑪', icon: '⑪', color: 'black', type: 'text' },
+    { label: '⑫', icon: '⑫', color: 'black', type: 'text' },
+    { label: '⑬', icon: '⑬', color: 'black', type: 'text' },
+    { label: '⑭', icon: '⑭', color: 'black', type: 'text' },
+    { label: '⑮', icon: '⑮', color: 'black', type: 'text' },
+    { label: '⑯', icon: '⑯', color: 'black', type: 'text' },
+    { label: '⑰', icon: '⑰', color: 'black', type: 'text' },
+    { label: '⑱', icon: '⑱', color: 'black', type: 'text' },
+    { label: '⑲', icon: '⑲', color: 'black', type: 'text' },
+    { label: '⑳', icon: '⑳', color: 'black', type: 'text' }
+  ],
+  'math': [
+    { label: '1', subtype: 'block-1', type: 'math', icon: '🔲' },
+    { label: '10', subtype: 'block-10', type: 'math', icon: '❚' },
+    { label: '100', subtype: 'block-100', type: 'math', icon: '▦' },
+    { label: '1000', subtype: 'block-1000', type: 'math', icon: '🧊' },
+    { label: '位取り', subtype: 'place-value', type: 'math', icon: '📊' },
+    { label: '筆算', subtype: 'calc-frame', type: 'math', icon: '📝' },
+    { label: '立方体', subtype: 'cube', type: 'math', icon: '🎲' },
+    { label: '直方体', subtype: 'cuboid', type: 'math', icon: '📦' },
+    { label: '円柱', subtype: 'cylinder', type: 'math', icon: '🛢' },
+    { label: '平行四', subtype: 'parallelogram', type: 'math', icon: '▱' },
+    { label: 'ひし形', subtype: 'rhombus', type: 'math', icon: '◇' },
+    { label: '台形', subtype: 'trapezoid', type: 'math', icon: '⏢' },
+    { label: '五角形', subtype: 'pentagon', type: 'math', icon: '⬠' },
+    { label: '六角形', subtype: 'hexagon', type: 'math', icon: '⬡' },
+    { label: '＋', icon: '＋', color: 'black', type: 'text' },
+    { label: '－', icon: '－', color: 'black', type: 'text' },
+    { label: '＝', icon: '＝', color: 'black', type: 'text' },
+    { label: '×', icon: '×', color: 'black', type: 'text' },
+    { label: '÷', icon: '÷', color: 'black', type: 'text' },
+    { label: '＜', icon: '＜', color: 'black', type: 'text' },
+    { label: '＞', icon: '＞', color: 'black', type: 'text' },
+    { label: 'およそ', icon: '≒', color: 'black', type: 'text' },
+    { label: '％', icon: '％', color: 'black', type: 'text' },
+    { label: '円', icon: '🔵', color: 'blue', type: 'text' },
+    { label: '三角', icon: '🔺', color: 'red', type: 'text' },
+    { label: '四角', icon: '🟥', color: 'green', type: 'text' },
+    { label: '直角', icon: '∟', color: 'black', type: 'text' },
+    { label: '平行', icon: '∥', color: 'black', type: 'text' },
+    { label: '垂直', icon: '⊥', color: 'black', type: 'text' },
+    { label: '三角定規', subtype: 'triangle-ruler', type: 'math', icon: '📐' },
+    { label: '分度器', icon: '⌒', color: 'black', type: 'text' },
+    { label: 'L', icon: 'L', color: 'black', type: 'text' },
+    { label: 'dL', icon: 'dL', color: 'black', type: 'text' },
+    { label: 'mL', icon: 'mL', color: 'black', type: 'text' },
+    { label: 'kg', icon: 'kg', color: 'black', type: 'text' },
+    { label: 'g', icon: 'g', color: 'black', type: 'text' },
+    { label: 'cm', icon: 'cm', color: 'black', type: 'text' },
+    { label: 'm', icon: 'm', color: 'black', type: 'text' },
+    { label: 'km', icon: 'km', color: 'black', type: 'text' },
+    { label: '❶', icon: '❶', color: 'black', type: 'text' },
+    { label: '❷', icon: '❷', color: 'black', type: 'text' },
+    { label: '❸', icon: '❸', color: 'black', type: 'text' }
+  ],
+  'eng': [
+    { label: 'Good', icon: 'Good', color: 'red', type: 'text' },
+    { label: 'Nice', icon: 'Nice', color: 'blue', type: 'text' },
+    { label: 'A', icon: 'A', color: 'black', type: 'text' },
+    { label: 'B', icon: 'B', color: 'black', type: 'text' },
+    { label: 'C', icon: 'C', color: 'black', type: 'text' },
+    { label: 'D', icon: 'D', color: 'black', type: 'text' },
+    { label: 'US', icon: '🇺🇸', color: 'black', type: 'text' },
+    { label: 'UK', icon: '🇬🇧', color: 'black', type: 'text' },
+    { label: 'Apple', icon: '🍎', color: 'red', type: 'text' },
+    { label: 'Pen', icon: '🖊️', color: 'black', type: 'text' }
+  ],
+  'social': [
+    { label: '晴れ', icon: '☀', color: 'red', type: 'text' },
+    { label: '曇り', icon: '☁', color: 'gray', type: 'text' },
+    { label: '雨', icon: '☔', color: 'blue', type: 'text' },
+    { label: '雪', icon: '⛄', color: 'cyan', type: 'text' },
+    { label: '虫眼鏡', icon: '🔍', color: 'black', type: 'text' },
+    { label: '磁石', icon: '🧲', color: 'red', type: 'text' },
+    { label: '電気', icon: '💡', color: 'orange', type: 'text' },
+    { label: '電池', icon: '🔋', color: 'green', type: 'text' },
+    { label: '実験', icon: '🧪', color: 'purple', type: 'text' },
+    { label: '顕微鏡', icon: '🔬', color: 'black', type: 'text' },
+    { label: '温度計', icon: '🌡️', color: 'red', type: 'text' },
+    { label: '植物', icon: '🌱', color: 'green', type: 'text' },
+    { label: '花', icon: '🌷', color: 'pink', type: 'text' },
+    { label: '月', icon: '🌕', color: 'gold', type: 'text' },
+    { label: '星', icon: '⭐', color: 'gold', type: 'text' },
+    { label: '学校', icon: '🏫', color: 'black', type: 'text' },
+    { label: '市役所', icon: '◎', color: 'black', type: 'text' },
+    { label: '交番', icon: 'X', color: 'black', type: 'text' },
+    { label: '消防署', icon: 'Y', color: 'red', type: 'text' },
+    { label: '病院', icon: '🏥', color: 'red', type: 'text' },
+    { label: '郵便局', icon: '📮', color: 'red', type: 'text' },
+    { label: '神社', icon: '⛩️', color: 'red', type: 'text' },
+    { label: '寺院', icon: '卍', color: 'black', type: 'text' },
+    { label: '城', icon: '🏯', color: 'black', type: 'text' },
+    { label: '工場', icon: '🏭', color: 'black', type: 'text' },
+    { label: '温泉', icon: '♨️', color: 'red', type: 'text' },
+    { label: '田', icon: '田', color: 'black', type: 'text' },
+    { label: '畑', icon: 'V', color: 'black', type: 'text' },
+    { label: '茶畑', icon: '∴', color: 'green', type: 'text' },
+    { label: '果樹園', icon: '🍎', color: 'red', type: 'text' },
+    { label: '針葉樹', icon: '🌲', color: 'green', type: 'text' },
+    { label: '広葉樹', icon: '🌳', color: 'green', type: 'text' },
+    { label: '地図', icon: '🗺️', color: 'green', type: 'text' },
+    { label: '方位', icon: '🧭', color: 'brown', type: 'text' }
+  ],
+  'life': [
+    { label: '発表', icon: '✋', color: 'black', type: 'text' },
+    { label: '話し合い', icon: '🗣️', color: 'blue', type: 'text' },
+    { label: '静かに', icon: '🤫', color: 'red', type: 'text' },
+    { label: 'ペア', icon: '👥', color: 'green', type: 'text' },
+    { label: 'グループ', icon: '👨‍👩‍👧‍👦', color: 'orange', type: 'text' },
+    { label: '重要', icon: '💡', color: 'gold', type: 'text' },
+    { label: 'はてな', icon: '❓', color: 'blue', type: 'text' },
+    { label: '給食', icon: '🍱', color: 'orange', type: 'text' },
+    { label: '掃除', icon: '🧹', color: 'blue', type: 'text' },
+    { label: '当番', icon: '📛', color: 'red', type: 'text' },
+    { label: '時間', icon: '⌛', color: 'black', type: 'text' },
+    { label: '時計', icon: '⏰', color: 'black', type: 'text' },
+    { label: '勉強', icon: '📖', color: 'blue', type: 'text' },
+    { label: '図書', icon: '📚', color: 'brown', type: 'text' },
+    { label: '遊び', icon: '⚽', color: 'black', type: 'text' },
+    { label: '保健', icon: '😷', color: 'green', type: 'text' },
+    { label: '音楽', icon: '🎵', color: 'black', type: 'text' },
+    { label: '天気', icon: '☀', color: 'orange', type: 'text' },
+    { label: '雨', icon: '☔', color: 'blue', type: 'text' },
+    { label: '星', icon: '★', color: 'orange', type: 'text' },
+    { label: 'ハート', icon: '❤', color: 'pink', type: 'text' },
+    { label: '矢印', icon: '➡', color: 'black', type: 'text' },
+    { label: '三角', icon: '▲', color: 'black', type: 'text' },
+    { label: '禁止', icon: '🛑', color: 'red', type: 'text' }
+  ]
+};
+
+const COLORS = ['#000000', '#ef4444', '#3b82f6', '#22c55e', '#f59e0b'];
+const STICKY_COLORS = ['#fff740', '#ffccff', '#ccffff', '#ccffcc'];
+
+const hexToRgba = (hex, alpha) => {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const createMathShape = (subtype, x, y) => {
+  if (!window.fabric) return null;
+  const fabric = window.fabric;
+  const yellow = '#ffeb3b'; const stroke = '#666';
+  
+  if (subtype === 'block-1') { return new fabric.Rect({ left: x, top: y, width: 30, height: 30, fill: yellow, stroke: stroke, strokeWidth: 2, originX: 'center', originY: 'center' }); }
+  else if (subtype === 'block-10') { const grp = [new fabric.Rect({ width: 30, height: 300, fill: yellow, stroke: stroke, strokeWidth: 2 })]; for (let i = 1; i < 10; i++) grp.push(new fabric.Line([0, i * 30, 30, i * 30], { stroke: stroke, strokeWidth: 1 })); return new fabric.Group(grp, { left: x, top: y, originX: 'center', originY: 'center', scaleX: 0.3, scaleY: 0.3 }); }
+  else if (subtype === 'block-100') { const rect = new fabric.Rect({ width: 300, height: 300, fill: yellow, stroke: stroke, strokeWidth: 2 }); const lines = [rect]; for (let i = 1; i < 10; i++) { lines.push(new fabric.Line([0, i * 30, 300, i * 30], { stroke: stroke, strokeWidth: 1 })); lines.push(new fabric.Line([i * 30, 0, i * 30, 300], { stroke: stroke, strokeWidth: 1 })); } return new fabric.Group(lines, { left: x, top: y, originX: 'center', originY: 'center', scaleX: 0.2, scaleY: 0.2 }); }
+  else if (subtype === 'block-1000') { const size = 100; const offset = 30; const front = new fabric.Rect({ left: 0, top: offset, width: size, height: size, fill: yellow, stroke: stroke, strokeWidth: 2 }); const top = new fabric.Polygon([{ x: 0, y: offset }, { x: offset, y: 0 }, { x: size + offset, y: 0 }, { x: size, y: offset }], { fill: '#fdd835', stroke: stroke, strokeWidth: 2 }); const side = new fabric.Polygon([{ x: size, y: offset }, { x: size + offset, y: 0 }, { x: size + offset, y: size }, { x: size, y: size + offset }], { fill: '#fbc02d', stroke: stroke, strokeWidth: 2 }); return new fabric.Group([front, top, side], { left: x, top: y, originX: 'center', originY: 'center', scaleX: 0.6, scaleY: 0.6 }); }
+  else if (subtype === 'place-value') { const w = 300; const h = 150; const bg = new fabric.Rect({ width: w, height: h, fill: 'white', stroke: 'black', strokeWidth: 2 }); const grp = [bg, new fabric.Line([w / 4, 0, w / 4, h], { stroke: 'black' }), new fabric.Line([w / 2, 0, w / 2, h], { stroke: 'black' }), new fabric.Line([w * 3 / 4, 0, w * 3 / 4, h], { stroke: 'black' }), new fabric.Line([0, 40, w, 40], { stroke: 'black' })]; const opts = { fontSize: 24, fontFamily: 'Zen Maru Gothic', fill: 'black', top: 8 }; grp.push(new fabric.Text('千', { ...opts, left: w * 0.125 - 12 }), new fabric.Text('百', { ...opts, left: w * 0.375 - 12 }), new fabric.Text('十', { ...opts, left: w * 0.625 - 12 }), new fabric.Text('一', { ...opts, left: w * 0.875 - 12 })); return new fabric.Group(grp, { left: x, top: y, originX: 'center', originY: 'center' }); }
+  else if (subtype === 'calc-frame') { const grp = []; const step = 40; for (let i = 0; i < 4; i++) grp.push(new fabric.Line([i * step, 0, i * step, step * 4], { stroke: '#ddd', strokeDashArray: [5, 5] })); for (let i = 0; i < 5; i++) grp.push(new fabric.Line([0, i * step, step * 3, i * step], { stroke: '#ddd', strokeDashArray: [5, 5] })); grp.push(new fabric.Line([0, step * 3, step * 3, step * 3], { stroke: 'black', strokeWidth: 2 })); return new fabric.Group(grp, { left: x, top: y, originX: 'center', originY: 'center', backgroundColor: 'rgba(255,255,255,0.5)' }); }
+
+  // Geometry 2D
+  else if (subtype === 'parallelogram') { return new fabric.Polygon([{ x: 20, y: 0 }, { x: 120, y: 0 }, { x: 100, y: 60 }, { x: 0, y: 60 }], { left: x, top: y, fill: 'transparent', stroke: 'black', strokeWidth: 2, originX: 'center', originY: 'center' }); }
+  else if (subtype === 'rhombus') { return new fabric.Polygon([{ x: 50, y: 0 }, { x: 100, y: 40 }, { x: 50, y: 80 }, { x: 0, y: 40 }], { left: x, top: y, fill: 'transparent', stroke: 'black', strokeWidth: 2, originX: 'center', originY: 'center' }); }
+  else if (subtype === 'trapezoid') { return new fabric.Polygon([{ x: 30, y: 0 }, { x: 90, y: 0 }, { x: 120, y: 60 }, { x: 0, y: 60 }], { left: x, top: y, fill: 'transparent', stroke: 'black', strokeWidth: 2, originX: 'center', originY: 'center' }); }
+  else if (subtype === 'pentagon') { return new fabric.Polygon([{ x: 50, y: 0 }, { x: 100, y: 38 }, { x: 81, y: 95 }, { x: 19, y: 95 }, { x: 0, y: 38 }], { left: x, top: y, fill: 'transparent', stroke: 'black', strokeWidth: 2, originX: 'center', originY: 'center' }); }
+  else if (subtype === 'hexagon') { return new fabric.Polygon([{ x: 25, y: 0 }, { x: 75, y: 0 }, { x: 100, y: 43 }, { x: 75, y: 86 }, { x: 25, y: 86 }, { x: 0, y: 43 }], { left: x, top: y, fill: 'transparent', stroke: 'black', strokeWidth: 2, originX: 'center', originY: 'center' }); }
+
+  // Geometry 3D (Wireframe)
+  else if (subtype === 'cube') {
+    const s = 80; const o = 30;
+    const front = new fabric.Rect({ width: s, height: s, fill: 'transparent', stroke: 'black', strokeWidth: 2 });
+    const top = new fabric.Polygon([{ x: 0, y: s }, { x: o, y: s - o }, { x: s + o, y: s - o }, { x: s, y: s }], { fill: 'transparent', stroke: 'black', strokeWidth: 2 });
+    const side = new fabric.Polygon([{ x: s, y: s }, { x: s + o, y: s - o }, { x: s + o, y: 2 * s - o }, { x: s, y: 2 * s }], { fill: 'transparent', stroke: 'black', strokeWidth: 2 });
+    return new fabric.Group([front, top, side], { left: x, top: y, originX: 'center', originY: 'center', scaleX: 0.8, scaleY: 0.8 });
+  }
+  else if (subtype === 'cuboid') {
+    const w = 120, h = 70, d = 30;
+    const front = new fabric.Rect({ width: w, height: h, fill: 'transparent', stroke: 'black', strokeWidth: 2 });
+    const top = new fabric.Polygon([{ x: 0, y: 0 }, { x: d, y: -d }, { x: w + d, y: -d }, { x: w, y: 0 }], { fill: 'transparent', stroke: 'black', strokeWidth: 2 });
+    const side = new fabric.Polygon([{ x: w, y: 0 }, { x: w + d, y: -d }, { x: w + d, y: h - d }, { x: w, y: h }], { fill: 'transparent', stroke: 'black', strokeWidth: 2 });
+    return new fabric.Group([front, top, side], { left: x, top: y, originX: 'center', originY: 'center', scaleX: 0.8, scaleY: 0.8 });
+  }
+  else if (subtype === 'cylinder') {
+    const w = 60, h = 80;
+    const e1 = new fabric.Ellipse({ rx: w / 2, ry: 10, fill: 'transparent', stroke: 'black', strokeWidth: 2, top: 0 });
+    const e2 = new fabric.Ellipse({ rx: w / 2, ry: 10, fill: 'transparent', stroke: 'black', strokeWidth: 2, top: h });
+    const l1 = new fabric.Line([0, 10, 0, h + 10], { stroke: 'black', strokeWidth: 2 });
+    const l2 = new fabric.Line([w, 10, w, h + 10], { stroke: 'black', strokeWidth: 2 });
+    return new fabric.Group([e1, e2, l1, l2], { left: x, top: y, originX: 'center', originY: 'center' });
+  }
+
+  // Tools
+  else if (subtype === 'triangle-ruler') {
+    return new fabric.Polygon([{ x: 0, y: 100 }, { x: 100, y: 100 }, { x: 0, y: 0 }], { left: x, top: y, fill: 'rgba(255,255,255,0.5)', stroke: 'black', strokeWidth: 2, originX: 'center', originY: 'center' });
+  }
+
+  return null;
+};
+
+// ==========================================
+// 2. 外部ライブラリ読み込み用フック (安定化版)
+// ==========================================
+const useExternalScripts = () => {
+  const [status, setStatus] = useState({ loaded: false, error: null });
+
+  useEffect(() => {
+    const loadScript = (src) => new Promise((resolve, reject) => {
+      let script = document.querySelector(`script[src="${src}"]`);
+      if (script) {
+        if (script.getAttribute('data-loaded') === 'true') {
+          return resolve();
+        } else {
+          script.addEventListener('load', resolve);
+          script.addEventListener('error', () => reject(new Error(`読み込み失敗: ${src}`)));
+          return;
+        }
+      }
+      script = document.createElement('script');
+      script.src = src;
+      script.crossOrigin = "anonymous";
+      script.onload = () => { 
+        script.setAttribute('data-loaded', 'true'); 
+        resolve(); 
+      };
+      script.onerror = () => reject(new Error(`読み込み失敗: ${src}`));
+      document.head.appendChild(script);
+    });
+
+    const init = async () => {
+      try {
+        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js');
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+        
+        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js');
+        await loadScript('https://cdn.jsdelivr.net/npm/idb-keyval@6.2.1/dist/umd.js');
+        await loadScript('https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js');
+        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js');
+        // Update the qrcode library URL to a valid CDN
+        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcode/1.5.1/qrcode.min.js');
+        
+        setStatus({ loaded: true, error: null });
+      } catch (error) { 
+        console.error("ライブラリ読み込みエラー:", error);
+        setStatus({ loaded: false, error: error.message });
+      }
+    };
+    init();
+  }, []);
+
+  return status;
+};
+
+// ==========================================
+// 3. 共通UIコンポーネント (モダン化)
+// ==========================================
+
+const Header = ({ onGoHome, title }) => (
+  <nav className="bg-white border-b-4 border-amber-500 px-6 py-2.5 flex justify-between items-center shadow-sm z-20 shrink-0">
+    <div className="flex items-center gap-3">
+      {onGoHome ? (
+        <button onClick={onGoHome} className="flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-amber-600 bg-slate-100 hover:bg-amber-50 px-3 py-1.5 rounded-xl transition-all active:scale-95">
+          <ChevronLeft size={18} /> 一覧へ戻る
+        </button>
+      ) : (
+        <div className="bg-amber-100 p-2 rounded-xl text-amber-600 shadow-inner"><Book size={24} /></div>
+      )}
+      <h1 className="text-xl font-bold text-slate-800 tracking-tight line-clamp-1">{title || APP_NAME}</h1>
+    </div>
+  </nav>
+);
+
+const Footer = () => (
+  <footer className="w-full bg-white border-t border-slate-200 pt-3 pb-2 text-center text-sm text-slate-500 font-bold shadow-sm shrink-0 z-20">
+    &copy; {new Date().getFullYear()} {APP_NAME} <a href={SNS_LINK} target="_blank" rel="noopener noreferrer" className="text-inherit hover:text-inherit no-underline cursor-default">{DEVELOPER_NAME}</a>
+  </footer>
+);
+
+// タイマー＆ストップウォッチパネル
+const TimerPanel = ({ onClose }) => {
+  const [tab, setTab] = useState('timer');
+  const [timeLeft, setTimeLeft] = useState(300);
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const [swTime, setSwTime] = useState(0);
+  const [isSwRunning, setIsSwRunning] = useState(false);
+  
+  useEffect(() => {
+    let interval;
+    if (tab === 'timer' && isTimerRunning && timeLeft > 0) interval = setInterval(() => setTimeLeft(t => t - 1), 1000);
+    else if (tab === 'timer' && timeLeft === 0) setIsTimerRunning(false);
+    else if (tab === 'stopwatch' && isSwRunning) interval = setInterval(() => setSwTime(t => t + 1), 1000);
+    return () => clearInterval(interval);
+  }, [isTimerRunning, timeLeft, isSwRunning, tab]);
+
+  const displayTime = tab === 'timer' ? timeLeft : swTime;
+  const mins = Math.floor(displayTime / 60).toString().padStart(2, '0');
+  const secs = (displayTime % 60).toString().padStart(2, '0');
+  const isRunning = tab === 'timer' ? isTimerRunning : isSwRunning;
+
+  return (
+    <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-md border border-slate-200 rounded-2xl shadow-xl z-50 p-4 w-64 animate-in fade-in slide-in-from-top-4">
+      <div className="flex justify-between items-center mb-4">
+        <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner">
+          <button onClick={() => setTab('timer')} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${tab === 'timer' ? 'bg-white shadow-sm text-amber-600' : 'text-slate-500 hover:text-slate-700'}`}>タイマー</button>
+          <button onClick={() => setTab('stopwatch')} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${tab === 'stopwatch' ? 'bg-white shadow-sm text-amber-600' : 'text-slate-500 hover:text-slate-700'}`}>ウォッチ</button>
+        </div>
+        <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"><X size={18}/></button>
+      </div>
+      
+      <div className={`text-4xl font-mono text-center font-bold mb-4 p-4 rounded-xl border-2 transition-colors ${tab === 'timer' && timeLeft === 0 ? 'bg-red-50 text-red-500 border-red-200 animate-pulse shadow-inner' : 'bg-slate-50 text-slate-800 border-slate-200 shadow-inner'}`}>
+        {mins}:{secs}
+      </div>
+      
+      {tab === 'timer' ? (
+        <div className="flex justify-center gap-2 mb-4">
+          <button onClick={() => setTimeLeft(t => t + 60)} className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-slate-600 transition-colors">+1分</button>
+          <button onClick={() => setTimeLeft(t => t + 300)} className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-slate-600 transition-colors">+5分</button>
+          <button onClick={() => { setTimeLeft(300); setIsTimerRunning(false); }} className="px-3 py-1.5 bg-red-50 hover:bg-red-100 rounded-lg text-xs font-bold text-red-600 flex items-center transition-colors"><RotateCcw size={14}/></button>
+        </div>
+      ) : (
+        <div className="flex justify-center mb-4">
+           <button onClick={() => { setSwTime(0); setIsSwRunning(false); }} className="w-full py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-slate-600 flex items-center justify-center gap-1 transition-colors"><RotateCcw size={14}/> リセット</button>
+        </div>
+      )}
+
+      <button onClick={() => tab === 'timer' ? setIsTimerRunning(!isTimerRunning) : setIsSwRunning(!isSwRunning)} className={`w-full py-2.5 rounded-xl font-bold text-white flex justify-center items-center gap-2 transition-all active:scale-95 shadow-md ${isRunning ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-500 hover:bg-blue-600'}`}>
+        {isRunning ? <><Pause size={18}/> ストップ</> : <><Play size={18}/> スタート</>}
+      </button>
+    </div>
+  );
+};
+
+// ==========================================
+// 4. メインアプリケーション
+// ==========================================
+
+export default function App() {
+  const { loaded: scriptsLoaded, error: scriptError } = useExternalScripts();
+  
+  // App States
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const [textbooks, setTextbooks] = useState([]);
+  const [currentTextbookId, setCurrentTextbookId] = useState(null);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const currentTextbook = textbooks.find(tb => tb.id === currentTextbookId);
+  const currentPages = currentTextbook ? currentTextbook.pages : [];
+  
+  // P2P Share States
+  const [shareMode, setShareMode] = useState('none'); // 'none', 'hosting', 'receiving'
+  const [shareUrl, setShareUrl] = useState('');
+  const [shareStatus, setShareStatus] = useState('');
+  const peerRef = useRef(null);
+  const connRef = useRef(null);
+  const qrCanvasRef = useRef(null);
+
+  // Editor States
+  const [mode, setMode] = useState('pencil'); 
+  const [color, setColor] = useState(COLORS[0]);
+  const [zoom, setZoom] = useState(1);
+  const [historyTrigger, setHistoryTrigger] = useState(0); // Undo/Redo UI更新用
+  
+  // UI States
+  const [showStampMenu, setShowStampMenu] = useState(false);
+  const [stampTab, setStampTab] = useState('eval');
+  const [myStamps, setMyStamps] = useState([]);
+  const [showMyStampCreator, setShowMyStampCreator] = useState(false);
+  const [showShapeMenu, setShowShapeMenu] = useState(false);
+  const [showStickyMenu, setShowStickyMenu] = useState(false);
+  const [showTimer, setShowTimer] = useState(false);
+  const [showLinkMenu, setShowLinkMenu] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showPageJump, setShowPageJump] = useState(false);
+  
+  // Custom Dialog & Toast
+  const [dialog, setDialog] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  // Refs
+  const canvasRef = useRef(null);
+  const fabricRef = useRef(null);
+  const containerRef = useRef(null);
+  const drawingsRef = useRef({});
+  
+  // History & Debounce Refs
+  const historyRef = useRef([]);
+  const redoStackRef = useRef([]);
+  const isHistoryProcessing = useRef(false);
+  const saveTimeoutRef = useRef(null);
+  const modeRef = useRef(mode);
+  const colorRef = useRef(color);
+
+  useEffect(() => { modeRef.current = mode; }, [mode]);
+  useEffect(() => { colorRef.current = color; }, [color]);
+
+  // --- Utility Functions ---
+  const showToast = useCallback((message, type = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  }, []);
+
+  const showConfirm = useCallback((title, message, onConfirm, confirmText = "実行する", isDestructive = false) => {
+    setDialog({ title, message, onConfirm, confirmText, isDestructive });
+  }, []);
+
+  const closeAllMenus = useCallback(() => { 
+    setShowStampMenu(false); setShowShapeMenu(false); setShowStickyMenu(false); setShowLinkMenu(false); setShowPageJump(false);
+  }, []);
+
+  const scanQRCode = useCallback((rect) => {
+    if (!fabricRef.current || !window.jsQR || !currentPages[currentPage]) return;
+    showToast("QRコードを解析中...", "info");
+    
+    // キャンバスの表示用画像ではなく、高解像度のPDF元画像を直接使用する
+    const img = new Image();
+    img.onload = () => {
+      const memCanvas = document.createElement('canvas');
+      memCanvas.width = img.width; memCanvas.height = img.height;
+      const ctx = memCanvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      
+      // キャンバスの論理サイズと、高解像度画像のサイズの比率を計算
+      const canvasW = fabricRef.current.width;
+      const canvasH = fabricRef.current.height;
+      const scaleX = img.width / canvasW;
+      const scaleY = img.height / canvasH;
+      
+      // 囲んだ枠より少し広めに切り抜く（精度向上のため）
+      const padding = 50; 
+      let sx = Math.max(0, (rect.left * scaleX) - padding);
+      let sy = Math.max(0, (rect.top * scaleY) - padding);
+      let sw = Math.min(img.width - sx, (rect.width * scaleX) + padding * 2);
+      let sh = Math.min(img.height - sy, (rect.height * scaleY) + padding * 2);
+      
+      let imageData;
+      try {
+        imageData = ctx.getImageData(sx, sy, sw, sh);
+      } catch(e) {
+        showToast("画像解析エラーが発生しました", "error");
+        return;
+      }
+      
+      // 1. 指定範囲でQR解析
+      let code = window.jsQR(imageData.data, imageData.width, imageData.height);
+      
+      // 2. もし見つからなければ、ページ全体からQRコードを探す（フォールバック）
+      if (!code) {
+        imageData = ctx.getImageData(0, 0, img.width, img.height);
+        code = window.jsQR(imageData.data, imageData.width, imageData.height);
+      }
+      
+      if (code && code.data) {
+        window.open(code.data, '_blank');
+        showToast("QRコードを読み取りました", "success");
+        setMode('select');
+      } else {
+        showToast("QRコードが見つかりません。もう少し広く囲むか、鮮明なPDFを使用してください。", "error");
+      }
+    };
+    // 元のPDF画像をセットして読み込み開始
+    img.src = currentPages[currentPage];
+  }, [showToast, currentPages, currentPage]);
+
+  // --- Initialization ---
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.innerHTML = `@import url('https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&display=swap'); body { font-family: 'Zen Maru Gothic', sans-serif; margin: 0; overflow: hidden; } .hide-scrollbar::-webkit-scrollbar { display: none; } .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }`;
+    document.head.appendChild(style);
+
+    const savedMyStamps = localStorage.getItem(DB_KEY_MYSTAMPS);
+    if (savedMyStamps) { try { setMyStamps(JSON.parse(savedMyStamps)); } catch(e){} }
+  }, []);
+
+  useEffect(() => {
+    if (!scriptsLoaded) return;
+    const initDB = async () => {
+      try {
+        const savedBooks = await window.idbKeyval.get(DB_KEY_TEXTBOOKS);
+        const savedDrawings = await window.idbKeyval.get(DB_KEY_DRAWINGS);
+        if (savedBooks) setTextbooks(savedBooks);
+        if (savedDrawings) drawingsRef.current = savedDrawings;
+        
+        // 前回開いていた状態の復元
+        if (savedBooks && savedBooks.length > 0) {
+          const lastOpened = localStorage.getItem(DB_KEY_LAST_OPENED);
+          if (lastOpened) {
+            try {
+              const { textbookId, page } = JSON.parse(lastOpened);
+              if (savedBooks.find(tb => tb.id === textbookId)) {
+                setCurrentTextbookId(textbookId);
+                setCurrentPage(page || 0);
+              }
+            } catch(e){}
+          }
+        }
+      } catch (e) { console.error("データ読み込み失敗", e); } 
+      finally { setIsDataLoaded(true); }
+    };
+    initDB();
+  }, [scriptsLoaded]);
+
+  // 開いている教科書・ページの保存
+  useEffect(() => {
+    if (currentTextbookId !== null) {
+      localStorage.setItem(DB_KEY_LAST_OPENED, JSON.stringify({ textbookId: currentTextbookId, page: currentPage }));
+    } else {
+      localStorage.removeItem(DB_KEY_LAST_OPENED);
+    }
+  }, [currentTextbookId, currentPage]);
+
+  // --- P2P Share Logic ---
+  // 受信側の処理（URLに ?host=ID がある場合）
+  useEffect(() => {
+    if (!isDataLoaded || !scriptsLoaded || !window.Peer) return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const hostId = urlParams.get('host');
+    
+    if (hostId && shareMode === 'none') {
+      setShareMode('receiving');
+      setShareStatus('ホストに接続しています...');
+      
+      const peer = new window.Peer();
+      peer.on('open', () => {
+        const conn = peer.connect(hostId, { reliable: true });
+        
+        conn.on('open', () => {
+          setShareStatus('データをダウンロード中...');
+        });
+        
+        conn.on('data', async (data) => {
+          setShareStatus('データを保存中...');
+          try {
+            const newId = 'tb_' + Date.now();
+            const newTb = { 
+              id: newId, 
+              title: data.title + ' (共有)', 
+              coverImage: data.pages[0], 
+              pages: data.pages 
+            };
+            
+            // 既存データとマージして保存
+            const updatedTextbooks = await window.idbKeyval.get(DB_KEY_TEXTBOOKS) || [];
+            const newTextbooks = [...updatedTextbooks, newTb];
+            await window.idbKeyval.set(DB_KEY_TEXTBOOKS, newTextbooks);
+            
+            const updatedDrawings = await window.idbKeyval.get(DB_KEY_DRAWINGS) || {};
+            updatedDrawings[newId] = data.drawings;
+            await window.idbKeyval.set(DB_KEY_DRAWINGS, updatedDrawings);
+            
+            // 状態の更新
+            setTextbooks(newTextbooks);
+            drawingsRef.current = updatedDrawings;
+            setCurrentTextbookId(newId);
+            setCurrentPage(0);
+            
+            // URLからパラメータを削除してクリーンにする
+            window.history.replaceState({}, document.title, window.location.pathname);
+            
+            showToast("共有データを受信しました！", "success");
+          } catch(e) {
+            showToast("データの保存に失敗しました", "error");
+          } finally {
+            setShareMode('none');
+            peer.destroy();
+          }
+        });
+        
+        conn.on('error', () => {
+          showToast("接続エラーが発生しました", "error");
+          setShareMode('none');
+        });
+      });
+    }
+  }, [isDataLoaded, scriptsLoaded, showToast, shareMode]);
+
+  // ホスト側（先生）の処理
+  const startHosting = () => {
+    if (!currentTextbookId || !window.Peer) return;
+    
+    // 描画データを最新にするため強制セーブ
+    if(fabricRef.current) {
+      if (!drawingsRef.current[currentTextbookId]) drawingsRef.current[currentTextbookId] = {};
+      drawingsRef.current[currentTextbookId][currentPage] = fabricRef.current.toJSON(['linkType', 'linkTarget', 'stampType']);
+    }
+
+    setShareMode('hosting');
+    setShareStatus('共有用のURLを作成中...');
+    
+    const peer = new window.Peer();
+    peerRef.current = peer;
+
+    peer.on('open', (id) => {
+      const url = new URL(window.location.href);
+      url.searchParams.set('host', id);
+      setShareUrl(url.toString());
+      setShareStatus('待機中... URLを共有してください。');
+    });
+
+    peer.on('connection', (conn) => {
+      connRef.current = conn;
+      setShareStatus('受信者と接続しました。データを送信中...');
+      
+      conn.on('open', () => {
+        const dataToShare = {
+          title: currentTextbook.title,
+          pages: currentTextbook.pages,
+          drawings: drawingsRef.current[currentTextbookId] || {}
+        };
+        // 大容量データ送信
+        conn.send(dataToShare);
+        setShareStatus('送信完了！ (複数人に送る場合はこのまま待機してください)');
+      });
+    });
+
+    peer.on('error', (err) => {
+      console.error(err);
+      setShareStatus('エラーが発生しました: ' + err.type);
+    });
+  };
+
+  const stopHosting = () => {
+    if (peerRef.current) peerRef.current.destroy();
+    setShareMode('none');
+    setShareUrl('');
+  };
+
+  // URLが変わったらQRコードを生成
+  useEffect(() => {
+    if (shareMode === 'hosting' && shareUrl && qrCanvasRef.current && window.QRCode) {
+      window.QRCode.toCanvas(qrCanvasRef.current, shareUrl, {
+        width: 160,
+        margin: 2,
+        color: {
+          dark: '#1e293b', // slate-800
+          light: '#ffffff'
+        }
+      }, (error) => {
+        if (error) console.error("QRコード生成エラー:", error);
+      });
+    }
+  }, [shareUrl, shareMode]);
+
+  // --- PDF Handlers ---
+  const handlePdfUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !scriptsLoaded || !isDataLoaded) return;
+    setIsProcessing(true);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await window.pdfjsLib.getDocument(arrayBuffer).promise;
+      const numPages = pdf.numPages;
+      const newPages = [];
+      for (let i = 1; i <= numPages; i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 1.5 });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width; canvas.height = viewport.height;
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+        newPages.push(canvas.toDataURL('image/jpeg', 0.8));
+      }
+      const newId = 'tb_' + Date.now();
+      const newTextbook = { id: newId, title: file.name.replace(/\.[^/.]+$/, ""), coverImage: newPages[0], pages: newPages };
+      const newTextbooks = [...textbooks, newTextbook];
+      await window.idbKeyval.set(DB_KEY_TEXTBOOKS, newTextbooks);
+      setTextbooks(newTextbooks);
+      setCurrentTextbookId(newId);
+      setCurrentPage(0);
+      setZoom(1);
+      showToast("PDFを読み込みました", "success");
+    } catch (error) { showToast("PDFの読み込みに失敗しました", "error"); } 
+    finally { setIsProcessing(false); e.target.value = null; }
+  };
+
+  const deleteTextbook = (id, e) => {
+    e.stopPropagation();
+    showConfirm(
+      "教科書の削除", 
+      "この教科書とすべての書き込みデータを完全に削除します。よろしいですか？", 
+      async () => {
+        const newTextbooks = textbooks.filter(tb => tb.id !== id);
+        setTextbooks(newTextbooks);
+        await window.idbKeyval.set(DB_KEY_TEXTBOOKS, newTextbooks);
+        if (drawingsRef.current[id]) {
+          delete drawingsRef.current[id];
+          await window.idbKeyval.set(DB_KEY_DRAWINGS, drawingsRef.current);
+        }
+        showToast("教科書を削除しました", "success");
+      },
+      "削除する",
+      true
+    );
+  };
+
+  // --- History & AutoSave System ---
+  const saveHistory = useCallback(() => {
+    if (isHistoryProcessing.current || !fabricRef.current) return;
+    const json = fabricRef.current.toJSON(['linkType', 'linkTarget', 'stampType']);
+    historyRef.current.push(JSON.stringify(json));
+    redoStackRef.current = [];
+    if (historyRef.current.length > 30) historyRef.current.shift();
+    setHistoryTrigger(prev => prev + 1);
+  }, []);
+
+  const triggerAutoSave = useCallback(() => {
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(async () => {
+      if (!fabricRef.current || !currentTextbookId) return;
+      if (!drawingsRef.current[currentTextbookId]) drawingsRef.current[currentTextbookId] = {};
+      drawingsRef.current[currentTextbookId][currentPage] = fabricRef.current.toJSON(['linkType', 'linkTarget', 'stampType']);
+      try { await window.idbKeyval.set(DB_KEY_DRAWINGS, drawingsRef.current); } catch (e) { }
+    }, 800); // 800ms debounce
+  }, [currentTextbookId, currentPage]);
+
+  const handleUndo = useCallback(() => {
+    if (historyRef.current.length <= 1 || !fabricRef.current) return;
+    isHistoryProcessing.current = true;
+    const currentState = historyRef.current.pop();
+    redoStackRef.current.push(currentState);
+    const previousState = historyRef.current[historyRef.current.length - 1];
+    
+    fabricRef.current.loadFromJSON(previousState, () => {
+      fabricRef.current.renderAll();
+      isHistoryProcessing.current = false;
+      setHistoryTrigger(prev => prev + 1);
+      triggerAutoSave();
+    });
+  }, [triggerAutoSave]);
+
+  const handleRedo = useCallback(() => {
+    if (redoStackRef.current.length === 0 || !fabricRef.current) return;
+    isHistoryProcessing.current = true;
+    const nextState = redoStackRef.current.pop();
+    historyRef.current.push(nextState);
+    
+    fabricRef.current.loadFromJSON(nextState, () => {
+      fabricRef.current.renderAll();
+      isHistoryProcessing.current = false;
+      setHistoryTrigger(prev => prev + 1);
+      triggerAutoSave();
+    });
+  }, [triggerAutoSave]);
+
+  // --- Fabric.js Setup ---
+  useEffect(() => {
+    if (!scriptsLoaded || !isDataLoaded || !currentTextbookId || currentPages.length === 0) return;
+
+    if (!fabricRef.current && canvasRef.current) {
+      fabricRef.current = new window.fabric.Canvas(canvasRef.current, { isDrawingMode: true, selection: true, preserveObjectStacking: true });
+
+      // Events for History & Save
+      fabricRef.current.on('path:created', () => { saveHistory(); triggerAutoSave(); });
+      fabricRef.current.on('object:modified', () => { saveHistory(); triggerAutoSave(); });
+      fabricRef.current.on('object:added', (e) => { 
+        // 図形描画中の一時的な追加は履歴に入れない
+        if(e.target && !e.target.isTemp) { saveHistory(); triggerAutoSave(); }
+      });
+      fabricRef.current.on('object:removed', () => { saveHistory(); triggerAutoSave(); });
+
+      // Interactions (Links & Text)
+      fabricRef.current.on('mouse:dblclick', (o) => {
+        if (!o.target) return;
+        if (o.target.linkType === 'url') window.open(o.target.linkTarget, '_blank');
+        else if (o.target.linkType === 'audio') new window.Audio(o.target.linkTarget).play().catch(() => showToast("音声を再生できませんでした", "error"));
+        else if (o.target.type === 'i-text' || o.target.type === 'textbox') { o.target.enterEditing(); o.target.selectAll(); }
+      });
+
+      // Drawing Shapes
+      let isMouseDown = false;
+      let activeShape = null;
+      let startPoint = null;
+
+      fabricRef.current.on('mouse:down', (o) => {
+        isMouseDown = true;
+        const canvas = fabricRef.current;
+        const ptr = canvas.getPointer(o.e);
+        const cMode = modeRef.current;
+
+        if (cMode === 'eraser' && o.target && o.target !== canvas.backgroundImage) {
+          canvas.remove(o.target);
+        } else if (cMode === 'qr') {
+          startPoint = ptr;
+          activeShape = new window.fabric.Rect({
+            left: ptr.x, top: ptr.y, width: 0, height: 0,
+            fill: 'rgba(59, 130, 246, 0.2)', stroke: '#3b82f6', strokeWidth: 2,
+            selectable: false, evented: false, isTemp: true
+          });
+          canvas.add(activeShape);
+        } else if (['rect', 'circle', 'line', 'arrow'].includes(cMode)) {
+          startPoint = ptr;
+          const strokeOpts = { stroke: colorRef.current, strokeWidth: 4, fill: 'transparent', isTemp: true };
+          
+          if (cMode === 'rect') activeShape = new window.fabric.Rect({ left: ptr.x, top: ptr.y, width: 0, height: 0, ...strokeOpts });
+          else if (cMode === 'circle') activeShape = new window.fabric.Ellipse({ left: ptr.x, top: ptr.y, rx: 0, ry: 0, ...strokeOpts });
+          else if (cMode === 'line' || cMode === 'arrow') activeShape = new window.fabric.Line([ptr.x, ptr.y, ptr.x, ptr.y], strokeOpts);
+          if (activeShape) canvas.add(activeShape);
+        }
+      });
+
+      fabricRef.current.on('mouse:move', (o) => {
+        if (!isMouseDown || !activeShape) return;
+        const ptr = fabricRef.current.getPointer(o.e);
+        const cMode = modeRef.current;
+
+        if (cMode === 'rect' || cMode === 'qr') activeShape.set({ left: Math.min(ptr.x, startPoint.x), top: Math.min(ptr.y, startPoint.y), width: Math.abs(ptr.x - startPoint.x), height: Math.abs(ptr.y - startPoint.y) });
+        else if (cMode === 'circle') activeShape.set({ rx: Math.abs(ptr.x - startPoint.x)/2, ry: Math.abs(ptr.y - startPoint.y)/2, left: Math.min(ptr.x, startPoint.x), top: Math.min(ptr.y, startPoint.y) });
+        else if (cMode === 'line' || cMode === 'arrow') activeShape.set({ x2: ptr.x, y2: ptr.y });
+        fabricRef.current.requestRenderAll();
+      });
+
+      fabricRef.current.on('mouse:up', () => {
+        isMouseDown = false;
+        if (activeShape) {
+           activeShape.isTemp = false; // 確定
+           const cMode = modeRef.current;
+           if (cMode === 'qr') {
+             const rectData = { left: activeShape.left, top: activeShape.top, width: activeShape.width, height: activeShape.height };
+             fabricRef.current.remove(activeShape);
+             activeShape = null; startPoint = null;
+             fabricRef.current.requestRenderAll();
+             if (rectData.width > 10 && rectData.height > 10) scanQRCode(rectData);
+             return;
+           } else if (cMode === 'arrow') {
+             const x1 = activeShape.x1, y1 = activeShape.y1, x2 = activeShape.x2, y2 = activeShape.y2;
+             const angle = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
+             const head = new window.fabric.Triangle({ left: x2, top: y2, width: 20, height: 20, fill: colorRef.current, originX: 'center', originY: 'center', angle: angle + 90 });
+             const group = new window.fabric.Group([activeShape, head]);
+             fabricRef.current.remove(activeShape);
+             fabricRef.current.add(group);
+           } else { activeShape.setCoords(); }
+           saveHistory();
+           triggerAutoSave();
+        }
+        activeShape = null; startPoint = null;
+      });
+    }
+
+    // Load Background & Data
+    const canvas = fabricRef.current;
+    window.fabric.Image.fromURL(currentPages[currentPage], (img) => {
+      const containerWidth = containerRef.current?.clientWidth || window.innerWidth - 40;
+      const containerHeight = containerRef.current?.clientHeight || window.innerHeight - 200;
+      const scale = Math.min(containerWidth / img.width, containerHeight / img.height) * 0.95; 
+      const renderWidth = img.width * scale;
+      const renderHeight = img.height * scale;
+
+      canvas.setWidth(renderWidth); canvas.setHeight(renderHeight);
+      img.scaleToWidth(renderWidth); img.scaleToHeight(renderHeight);
+      
+      // Ensure background is not selectable
+      img.selectable = false;
+      img.evented = false;
+      canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas));
+
+      const loadData = () => {
+        isHistoryProcessing.current = true;
+        historyRef.current = [JSON.stringify(canvas.toJSON(['linkType', 'linkTarget', 'stampType']))];
+        redoStackRef.current = [];
+        setHistoryTrigger(prev => prev + 1);
+        isHistoryProcessing.current = false;
+      };
+
+      if (drawingsRef.current[currentTextbookId]?.[currentPage]) {
+        canvas.loadFromJSON(drawingsRef.current[currentTextbookId][currentPage], () => {
+          canvas.renderAll();
+          loadData();
+        });
+      } else {
+        canvas.clear();
+        canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas));
+        loadData();
+      }
+    });
+  }, [scriptsLoaded, isDataLoaded, currentTextbookId, currentPages, currentPage, saveHistory, triggerAutoSave]);
+
+  // --- Tool Modes ---
+  useEffect(() => {
+    if (!fabricRef.current) return;
+    const canvas = fabricRef.current;
+    canvas.isDrawingMode = false;
+    canvas.selection = false;
+    canvas.defaultCursor = 'crosshair';
+    canvas.hoverCursor = 'crosshair';
+
+    if (mode === 'pencil') {
+      canvas.isDrawingMode = true;
+      canvas.freeDrawingBrush = new window.fabric.PencilBrush(canvas);
+      canvas.freeDrawingBrush.color = color;
+      canvas.freeDrawingBrush.width = 4;
+    } else if (mode === 'highlighter') {
+      canvas.isDrawingMode = true;
+      canvas.freeDrawingBrush = new window.fabric.PencilBrush(canvas);
+      canvas.freeDrawingBrush.color = hexToRgba(color, 0.4);
+      canvas.freeDrawingBrush.width = 24;
+    } else if (mode === 'eraser') {
+      canvas.defaultCursor = 'cell'; 
+      canvas.hoverCursor = 'cell';
+    } else if (mode === 'qr') {
+      canvas.defaultCursor = 'crosshair';
+      canvas.hoverCursor = 'crosshair';
+    } else if (mode === 'select') {
+      canvas.defaultCursor = 'default';
+      canvas.hoverCursor = 'move';
+      canvas.selection = true;
+    }
+  }, [mode, color]);
+
+  // --- Add Objects ---
+  const addObjectToCenter = useCallback((obj, autoEdit = false) => {
+    if (!fabricRef.current) return;
+    const canvas = fabricRef.current;
+    
+    const vpt = canvas.viewportTransform;
+    const zoom = canvas.getZoom();
+    const centerX = (-vpt[4] + canvas.getWidth() / 2) / zoom;
+    const centerY = (-vpt[5] + canvas.getHeight() / 2) / zoom;
+
+    obj.set({ left: centerX, top: centerY });
+    canvas.add(obj); 
+    canvas.setActiveObject(obj);
+    canvas.requestRenderAll();
+    
+    if (autoEdit && obj.enterEditing) {
+      obj.enterEditing(); obj.selectAll();
+    }
+    setMode('select'); closeAllMenus();
+    saveHistory(); triggerAutoSave();
+  }, [closeAllMenus, saveHistory, triggerAutoSave]);
+
+  const addTextOrStamp = (textValue, isStamp = false) => {
+    const obj = new window.fabric.IText(textValue, {
+      fontSize: isStamp ? 80 : 36, fill: isStamp ? undefined : color,
+      fontFamily: 'Zen Maru Gothic', originX: 'center', originY: 'center',
+      transparentCorners: false, cornerColor: '#f59e0b', cornerStyle: 'circle'
+    });
+    addObjectToCenter(obj, !isStamp);
+  };
+
+  const addPresetStampToCanvas = useCallback((stamp) => {
+    let obj = null;
+    if (stamp.type === 'math' && stamp.subtype) {
+       obj = createMathShape(stamp.subtype, 0, 0); 
+    } else {
+       const content = stamp.type === 'vertical' ? stamp.text : stamp.icon;
+       obj = new window.fabric.Text(content, {
+         fontSize: stamp.type === 'vertical' ? 36 : 80,
+         fill: stamp.color,
+         fontFamily: 'Zen Maru Gothic',
+         textAlign: 'center',
+         lineHeight: 1.1,
+         originX: 'center', originY: 'center',
+         transparentCorners: false, cornerColor: '#f59e0b', cornerStyle: 'circle',
+         backgroundColor: stamp.type === 'vertical' ? 'rgba(255,255,255,0.8)' : undefined
+       });
+    }
+    if (obj) {
+      obj.set({ stampType: stamp.type }); 
+      addObjectToCenter(obj);
+    }
+  }, [addObjectToCenter]);
+
+  const addCustomStampToCanvas = (stamp) => {
+    const textObj = new window.fabric.Text(stamp.text, { fontSize: 80, fill: stamp.color, fontFamily: 'Zen Maru Gothic', originX: 'center', originY: 'center' });
+    let shapeObj = null;
+    const p = 20;
+    if (stamp.shape !== 'none') {
+      const size = Math.max(textObj.width + p*2, textObj.height + p*2);
+      if (stamp.shape === 'circle') shapeObj = new window.fabric.Circle({ radius: size/2, fill: '', stroke: stamp.color, strokeWidth: 8, originX: 'center', originY: 'center' });
+      else if (stamp.shape === 'square') shapeObj = new window.fabric.Rect({ width: textObj.width + p*2, height: textObj.height + p*2, fill: '', stroke: stamp.color, strokeWidth: 8, originX: 'center', originY: 'center' });
+    }
+    const finalObj = shapeObj ? new window.fabric.Group([shapeObj, textObj], { originX: 'center', originY: 'center', scaleX: 0.5, scaleY: 0.5 }) : textObj.set({ scaleX: 0.5, scaleY: 0.5 });
+    addObjectToCenter(finalObj);
+  };
+
+  const addStickyNote = (bgColor) => {
+    const sticky = new window.fabric.Textbox('メモ', {
+      width: 200, fontSize: 24, fill: '#000', fontFamily: 'Zen Maru Gothic',
+      backgroundColor: bgColor, padding: 15, textAlign: 'left', originX: 'center', originY: 'center',
+      shadow: new window.fabric.Shadow({ color: 'rgba(0,0,0,0.2)', blur: 15, offsetX: 5, offsetY: 5 }),
+      transparentCorners: false, cornerColor: '#f59e0b', cornerStyle: 'circle'
+    });
+    addObjectToCenter(sticky, true);
+  };
+
+  const addLinkOrAudio = (type) => {
+    closeAllMenus();
+    const isUrl = type === 'url';
+    const url = window.prompt(isUrl ? 'リンク先のURLを入力してください' : '音声ファイルのURLを入力してください');
+    if (!url) return;
+    
+    const textObj = new window.fabric.Text(isUrl ? '🔗' : '🔊', { fontSize: 24, originX: 'center', originY: 'center' });
+    const circleObj = new window.fabric.Circle({ radius: 24, fill: isUrl ? '#e0f2fe' : '#fce7f3', stroke: isUrl ? '#0284c7' : '#db2777', strokeWidth: 2, originX: 'center', originY: 'center', shadow: new window.fabric.Shadow({ color: 'rgba(0,0,0,0.1)', blur: 5, offsetY: 2 }) });
+    const group = new window.fabric.Group([circleObj, textObj], { originX: 'center', originY: 'center', linkType: type, linkTarget: url });
+    addObjectToCenter(group);
+    showToast(isUrl ? "リンクを配置しました。ダブルクリックで開きます。" : "音声を配置しました。ダブルクリックで再生します。");
+  };
+
+  const changePage = useCallback((delta) => {
+    const newPage = currentPage + delta;
+    if (newPage >= 0 && newPage < currentPages.length) {
+      setCurrentPage(newPage);
+      setZoom(1);
+    }
+  }, [currentPage, currentPages.length]);
+
+  const clearCurrentPage = () => {
+    showConfirm("ページの消去", "このページの書き込みをすべて消去しますか？", async () => {
+      if (!fabricRef.current) return;
+      fabricRef.current.clear();
+      window.fabric.Image.fromURL(currentPages[currentPage], (img) => {
+        img.scaleToWidth(fabricRef.current.width); img.scaleToHeight(fabricRef.current.height);
+        img.selectable = false; img.evented = false;
+        fabricRef.current.setBackgroundImage(img, fabricRef.current.renderAll.bind(fabricRef.current));
+      });
+      saveHistory(); triggerAutoSave();
+      showToast("ページをクリアしました", "success");
+    }, "消去する", true);
+  };
+
+  // --- キーボードショートカット ---
+  useEffect(() => {
+    if (!currentTextbookId) return;
+
+    const handleKeyDown = (e) => {
+      // 入力フォームやテキスト編集中はショートカットを無効化
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.target.isContentEditable) return;
+
+      if (e.key === '?') {
+        e.preventDefault();
+        setShowShortcuts(prev => !prev);
+        return;
+      }
+
+      // Undo (Ctrl+Z / Cmd+Z)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) handleRedo();
+        else handleUndo();
+        return;
+      }
+      
+      // Redo (Ctrl+Y / Cmd+Y)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
+
+      switch (e.key) {
+        case 'ArrowRight':
+        case 'ArrowDown':
+          e.preventDefault();
+          changePage(1);
+          break;
+        case 'ArrowLeft':
+        case 'ArrowUp':
+          e.preventDefault();
+          changePage(-1);
+          break;
+        case 'Delete':
+        case 'Backspace':
+          // 選択モードでオブジェクトが選ばれている時のみ削除
+          if (fabricRef.current && modeRef.current === 'select') {
+            const activeObjects = fabricRef.current.getActiveObjects();
+            if (activeObjects.length > 0) {
+              e.preventDefault();
+              activeObjects.forEach(obj => fabricRef.current.remove(obj));
+              fabricRef.current.discardActiveObject();
+              saveHistory();
+              triggerAutoSave();
+            }
+          }
+          break;
+        case 'v': case 'V': setMode('select'); break;
+        case 'p': case 'P': setMode('pencil'); break;
+        case 'e': case 'E': setMode('eraser'); break;
+        case 'h': case 'H': setMode('highlighter'); break;
+        case 'q': case 'Q': setMode('qr'); break;
+        default: break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentTextbookId, changePage, handleUndo, handleRedo]);
+
+  // ==========================================
+  // レンダリング
+  // ==========================================
+  if (scriptError) {
+    return (
+      <div className="h-screen w-full flex items-center justify-center bg-amber-50/40">
+        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-lg text-center border-2 border-red-200">
+          <AlertCircle size={48} className="text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-slate-800 mb-2">ライブラリの読み込みに失敗しました</h2>
+          <p className="text-slate-600 text-sm mb-4">
+            インターネット接続を確認し、ページを再読み込みしてください。<br/>
+            学校のネットワーク制限でブロックされている可能性もあります。
+          </p>
+          <div className="bg-slate-100 p-3 rounded-lg text-left text-xs font-mono text-red-600 overflow-hidden mb-6">
+            {scriptError}
+          </div>
+          <button onClick={() => window.location.reload()} className="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow-md transition-all active:scale-95">
+            ページを再読み込み
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!scriptsLoaded || !isDataLoaded) {
+    return <div className="h-screen w-full flex items-center justify-center bg-amber-50/40"><div className="flex flex-col items-center gap-4 text-amber-600"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-amber-500"></div><div className="text-xl font-bold animate-pulse">システムを準備中...</div></div></div>;
+  }
+
+  return (
+    <div className="h-screen w-full flex flex-col bg-slate-100 overflow-hidden relative">
+      <Header onGoHome={currentTextbookId ? () => setCurrentTextbookId(null) : null} title={currentTextbook?.title} />
+      
+      {/* --- ホーム画面 --- */}
+      {!currentTextbookId && (
+        <main className="flex-grow overflow-auto p-6 md:p-10 bg-amber-50/40">
+          <div className="max-w-6xl mx-auto animate-in fade-in zoom-in-95 duration-300">
+            <h2 className="text-3xl font-bold text-slate-800 mb-8 flex items-center gap-3 drop-shadow-sm"><BookOpen size={36} className="text-amber-500" /> わたしのプリント・教科書</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+              <label className="bg-white border-4 border-dashed border-amber-200 hover:border-amber-400 rounded-3xl flex flex-col items-center justify-center p-6 cursor-pointer hover:bg-amber-50 transition-all active:scale-95 min-h-[260px] shadow-sm hover:shadow-md">
+                {isProcessing ? (
+                  <div className="flex flex-col items-center text-amber-500"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-amber-500 mb-3"></div><span className="font-bold text-lg">変換中...</span></div>
+                ) : (
+                  <><div className="bg-amber-100 p-5 rounded-full mb-4 text-amber-500 shadow-inner"><Plus size={40} /></div><span className="font-bold text-slate-600 text-lg">新しいPDFを追加</span><input type="file" accept="application/pdf" className="hidden" onChange={handlePdfUpload} disabled={isProcessing}/></>
+                )}
+              </label>
+              {textbooks.map(tb => (
+                <div key={tb.id} onClick={() => { setCurrentTextbookId(tb.id); setCurrentPage(0); setZoom(1); }} className="bg-white rounded-3xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group relative overflow-hidden flex flex-col border border-slate-100 min-h-[260px]">
+                  <div className="h-44 bg-slate-100 relative border-b border-slate-100 flex items-center justify-center p-3 overflow-hidden">
+                    <img src={tb.coverImage} alt={tb.title} className="max-h-full max-w-full object-contain drop-shadow-md group-hover:scale-105 transition-transform duration-300" />
+                    <button onClick={(e) => deleteTextbook(tb.id, e)} className="absolute top-3 right-3 bg-white/90 backdrop-blur hover:bg-red-50 text-slate-400 hover:text-red-500 p-2.5 rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-md"><Trash2 size={20} /></button>
+                  </div>
+                  <div className="p-5 bg-white flex-grow flex flex-col justify-between"><h3 className="font-bold text-slate-800 line-clamp-2 text-base leading-snug">{tb.title}</h3><div className="text-sm text-slate-400 font-bold mt-3 flex items-center gap-1.5"><BookOpen size={16} /> {tb.pages.length} ページ</div></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </main>
+      )}
+
+      {/* --- エディタ画面 --- */}
+      {currentTextbookId && (
+        <>
+          {/* ツールバー (折り返し対応) */}
+          <div className="bg-white border-b border-slate-200 shadow-sm z-10 relative">
+            <div className="flex flex-wrap px-4 py-2.5 gap-y-3 gap-x-4 items-center mx-auto justify-center">
+              
+              {/* Undo / Redo */}
+              <div className="flex bg-slate-100 rounded-xl p-1 shadow-inner">
+                <button onClick={handleUndo} disabled={historyRef.current.length <= 1} className="p-2 rounded-lg text-slate-600 disabled:opacity-30 hover:bg-white hover:shadow-sm transition-all active:scale-95"><Undo2 size={20} /></button>
+                <button onClick={handleRedo} disabled={redoStackRef.current.length === 0} className="p-2 rounded-lg text-slate-600 disabled:opacity-30 hover:bg-white hover:shadow-sm transition-all active:scale-95"><Redo2 size={20} /></button>
+              </div>
+
+              <div className="w-px h-8 bg-slate-300 rounded-full hidden sm:block"></div>
+
+              {/* 描画・選択ツール */}
+              <div className="flex bg-slate-100 rounded-xl p-1 gap-1 shadow-inner">
+                <button onClick={() => setMode('select')} className={`p-2 rounded-lg transition-all active:scale-95 ${mode === 'select' ? 'bg-white text-amber-600 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-200'}`} title="選択"><MousePointer2 size={20} /></button>
+                <button onClick={() => setMode('pencil')} className={`p-2 rounded-lg transition-all active:scale-95 ${mode === 'pencil' ? 'bg-white text-amber-600 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-200'}`} title="えんぴつ"><Pencil size={20} /></button>
+                <button onClick={() => setMode('highlighter')} className={`p-2 rounded-lg transition-all active:scale-95 ${mode === 'highlighter' ? 'bg-white text-amber-600 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-200'}`} title="マーカー"><Highlighter size={20} /></button>
+                <button onClick={() => setMode('eraser')} className={`p-2 rounded-lg transition-all active:scale-95 ${mode === 'eraser' ? 'bg-white text-amber-600 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-200'}`} title="けしごむ"><Eraser size={20} /></button>
+                <button onClick={() => setMode('qr')} className={`p-2 rounded-lg transition-all active:scale-95 ${mode === 'qr' ? 'bg-white text-amber-600 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-200'}`} title="QRコード読み取り"><QrCode size={20} /></button>
+              </div>
+
+              {/* カラーパレット */}
+              <div className="flex items-center gap-1.5 bg-slate-100 rounded-xl p-1.5 px-3 shadow-inner">
+                {COLORS.map(c => (
+                  <button key={c} onClick={() => setColor(c)} className={`w-6 h-6 rounded-full shadow-sm border-2 transition-transform duration-200 active:scale-90 ${color === c ? 'border-amber-400 scale-125' : 'border-white hover:scale-110'}`} style={{ backgroundColor: c }} />
+                ))}
+              </div>
+
+              <div className="w-px h-8 bg-slate-300 rounded-full hidden sm:block"></div>
+
+              {/* 挿入ツール群 */}
+              <div className="flex gap-2 relative">
+                <div className="relative">
+                  <button onClick={() => { closeAllMenus(); setShowShapeMenu(!showShapeMenu); }} className={`flex items-center gap-1.5 border-2 font-bold px-3 py-2 rounded-xl transition-all active:scale-95 text-sm ${['rect','circle','line','arrow'].includes(mode) || showShapeMenu ? 'bg-amber-100 border-amber-400 text-amber-700 shadow-inner' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm'}`}>
+                    <Square size={16} /> 図形
+                  </button>
+                  {showShapeMenu && (
+                    <div className="absolute top-full mt-2 left-0 bg-white border border-slate-200 p-2 rounded-xl shadow-xl z-50 flex gap-2 animate-in fade-in slide-in-from-top-2">
+                      {['rect', 'circle', 'line', 'arrow'].map(m => (
+                        <button key={m} onClick={() => { setMode(m); setShowShapeMenu(false); }} className={`p-2.5 rounded-lg transition-colors ${mode === m ? 'bg-amber-100 text-amber-600' : 'text-slate-600 hover:bg-slate-100'}`}>
+                          {m === 'rect' && <Square size={20}/>}{m === 'circle' && <Circle size={20}/>}{m === 'line' && <Minus size={20}/>}{m === 'arrow' && <ArrowRight size={20}/>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <button onClick={() => { closeAllMenus(); addTextOrStamp("テキスト", false); }} className="flex items-center gap-1.5 bg-white border-2 border-slate-200 hover:bg-slate-50 hover:border-amber-300 text-slate-600 font-bold px-3 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm">
+                  <Type size={16} /> もじ
+                </button>
+                
+                <div className="relative">
+                  <button onClick={() => { closeAllMenus(); setShowStickyMenu(!showStickyMenu); }} className={`flex items-center gap-1.5 border-2 font-bold px-3 py-2 rounded-xl transition-all active:scale-95 text-sm ${showStickyMenu ? 'bg-amber-100 border-amber-400 text-amber-700 shadow-inner' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm'}`}>
+                    <StickyNote size={16} /> ふせん
+                  </button>
+                  {showStickyMenu && (
+                    <div className="absolute top-full mt-2 left-0 bg-white border border-slate-200 p-3 rounded-xl shadow-xl z-50 flex gap-3 animate-in fade-in slide-in-from-top-2">
+                      {STICKY_COLORS.map(c => <button key={c} onClick={() => addStickyNote(c)} className="w-10 h-10 rounded-lg shadow-sm border hover:scale-110 transition-transform" style={{ backgroundColor: c }} />)}
+                    </div>
+                  )}
+                </div>
+
+                <div className="relative">
+                   <button onClick={() => { closeAllMenus(); setShowLinkMenu(!showLinkMenu); }} className={`flex items-center gap-1.5 border-2 font-bold px-3 py-2 rounded-xl transition-all active:scale-95 text-sm ${showLinkMenu ? 'bg-amber-100 border-amber-400 text-amber-700 shadow-inner' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm'}`}>
+                    <LinkIcon size={16} /> リンク
+                  </button>
+                  {showLinkMenu && (
+                    <div className="absolute top-full mt-2 left-0 bg-white border border-slate-200 p-2 rounded-xl shadow-xl z-50 flex flex-col gap-1 w-36 animate-in fade-in slide-in-from-top-2">
+                       <button onClick={() => addLinkOrAudio('url')} className="flex items-center gap-2 p-2 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 transition-colors"><LinkIcon size={16} className="text-blue-500"/> Webを開く</button>
+                       <button onClick={() => addLinkOrAudio('audio')} className="flex items-center gap-2 p-2 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 transition-colors"><Volume2 size={16} className="text-pink-500"/> 音声再生</button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="relative">
+                  <button onClick={() => { closeAllMenus(); setShowStampMenu(!showStampMenu); }} className={`flex items-center gap-1.5 border-2 font-bold px-3 py-2 rounded-xl transition-all active:scale-95 text-sm ${showStampMenu ? 'bg-amber-100 border-amber-400 text-amber-700 shadow-inner' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm'}`}>
+                    <Smile size={16} /> スタンプ
+                  </button>
+                  {showStampMenu && (
+                    <div className="absolute top-full mt-2 left-auto right-0 xl:left-0 xl:right-auto bg-white border border-slate-200 p-4 rounded-2xl shadow-2xl z-50 w-80 animate-in fade-in slide-in-from-top-2">
+                      <div className="flex bg-slate-100 p-1 rounded-xl mb-3 shadow-inner overflow-x-auto hide-scrollbar">
+                        {STAMP_CATEGORIES.map(cat => (
+                          <button key={cat.id} onClick={() => setStampTab(cat.id)} className={`flex-shrink-0 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${stampTab === cat.id ? 'bg-white shadow-sm text-amber-600' : 'text-slate-500 hover:text-slate-700'}`}>
+                            {cat.name}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="grid grid-cols-4 gap-2 max-h-56 overflow-y-auto p-1 hide-scrollbar">
+                        {stampTab !== 'my' && STAMPS_DATA[stampTab].map((stamp, idx) => (
+                          <button key={idx} onClick={() => addPresetStampToCanvas(stamp)} className="flex flex-col items-center justify-center py-2 px-1 rounded-xl hover:bg-amber-50 border border-transparent hover:border-amber-200 transition-all active:scale-95 group">
+                            <span className="text-2xl leading-none mb-1 group-hover:scale-110 transition-transform" style={{color: stamp.color}}>
+                              {stamp.type === 'vertical' ? stamp.text.replace(/\n/g, '') : stamp.icon}
+                            </span>
+                            <span className="text-[9px] font-bold text-slate-500 truncate w-full text-center">{stamp.label}</span>
+                          </button>
+                        ))}
+                        {stampTab === 'my' && (
+                          <>
+                            <button onClick={() => {setShowStampMenu(false); setShowMyStampCreator(true);}} className="col-span-4 py-3 border-2 border-dashed border-amber-300 rounded-xl text-amber-600 font-bold text-sm hover:bg-amber-50 flex items-center justify-center gap-1 mb-2 transition-colors">
+                              <Plus size={16}/> 新しいスタンプを作る
+                            </button>
+                            {myStamps.map((stamp, idx) => (
+                              <div key={idx} className="relative group flex justify-center items-center">
+                                <button onClick={() => addCustomStampToCanvas(stamp)} className="w-14 h-14 flex items-center justify-center rounded-xl hover:bg-amber-50 border border-transparent hover:border-amber-200 transition-all active:scale-95">
+                                  <div className="flex items-center justify-center font-bold text-base" style={{ color: stamp.color, border: stamp.shape !== 'none' ? `3px solid ${stamp.color}` : 'none', borderRadius: stamp.shape === 'circle' ? '50%' : '8px', width: '44px', height: '44px' }}>{stamp.text}</div>
+                                </button>
+                                <button onClick={(e) => {e.stopPropagation(); deleteMyStamp(idx);}} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:bg-red-600"><X size={12}/></button>
+                              </div>
+                            ))}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <div className="w-px h-8 bg-slate-300 rounded-full"></div>
+
+              {/* タイマー表示ボタン */}
+              <button onClick={() => setShowTimer(!showTimer)} className={`flex items-center gap-1.5 font-bold px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm ${showTimer ? 'bg-blue-600 text-white shadow-inner' : 'bg-white border border-blue-200 text-blue-600 hover:bg-blue-50'}`}>
+                <Timer size={16} /> タイマー
+              </button>
+
+              <div className="w-px h-8 bg-slate-300 rounded-full hidden sm:block"></div>
+
+              {/* 共有ボタン */}
+              <button onClick={startHosting} className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-bold px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-md shadow-emerald-500/30">
+                <Share2 size={16} /> 共有する
+              </button>
+
+              <div className="w-px h-8 bg-slate-300 rounded-full hidden sm:block"></div>
+
+              {/* ショートカットヘルプ */}
+              <button onClick={() => setShowShortcuts(true)} className="flex items-center justify-center p-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-slate-700 rounded-xl transition-all active:scale-95 shadow-sm" title="ショートカットキー (?)">
+                <Info size={18} />
+              </button>
+            </div>
+          </div>
+
+          {/* キャンバスエリア */}
+          <main ref={containerRef} className="flex-grow overflow-auto relative bg-slate-200/80 flex items-center justify-center p-6" onClick={closeAllMenus}>
+            <div className="bg-white shadow-xl transition-transform duration-200 origin-center rounded-sm" style={{ transform: `scale(${zoom})` }}>
+              <canvas ref={canvasRef} />
+            </div>
+            
+            {showTimer && <TimerPanel onClose={() => setShowTimer(false)} />}
+            
+            {/* ページナビゲーション (Floating) */}
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-slate-800/80 backdrop-blur-md text-white rounded-full px-4 py-2 shadow-lg z-20 animate-in slide-in-from-bottom-5">
+              <button onClick={() => changePage(-1)} disabled={currentPage === 0} className="p-1 hover:text-amber-400 disabled:opacity-30 transition-colors"><ChevronLeft size={24} /></button>
+              
+              <div className="relative flex items-center justify-center">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); closeAllMenus(); setShowPageJump(!showPageJump); }} 
+                  className="font-bold w-16 text-center tracking-widest hover:text-amber-400 transition-colors"
+                  title="ページを移動"
+                >
+                  {currentPage + 1} / {currentPages.length}
+                </button>
+                
+                {showPageJump && (
+                  <div className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 bg-white text-slate-800 p-3 rounded-2xl shadow-xl border border-slate-200 animate-in zoom-in-95 flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                    <span className="text-xs font-bold text-slate-500 whitespace-nowrap">ページ移動:</span>
+                    <input 
+                      type="number" 
+                      min="1" 
+                      max={currentPages.length} 
+                      defaultValue={currentPage + 1}
+                      autoFocus
+                      onFocus={(e) => e.target.select()}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const p = parseInt(e.target.value, 10);
+                          if (!isNaN(p) && p >= 1 && p <= currentPages.length) {
+                            setCurrentPage(p - 1);
+                            setZoom(1);
+                            setShowPageJump(false);
+                          } else {
+                            showToast(`1 から ${currentPages.length} の間で入力してください`, "error");
+                          }
+                        }
+                      }}
+                      className="w-16 border-2 border-slate-200 rounded-xl p-1 text-center font-bold focus:border-amber-400 outline-none"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <button onClick={() => changePage(1)} disabled={currentPage === currentPages.length - 1} className="p-1 hover:text-amber-400 disabled:opacity-30 transition-colors"><ChevronRight size={24} /></button>
+            </div>
+
+            {/* ズーム＆クリア (Floating Right) */}
+            <div className="absolute bottom-6 right-6 flex flex-col gap-3 z-20">
+              <div className="flex flex-col bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+                <button onClick={() => setZoom(Math.min(3, zoom + 0.2))} className="p-3 text-slate-600 hover:bg-slate-50 hover:text-amber-600 transition-colors border-b border-slate-100"><ZoomIn size={20} /></button>
+                <div className="py-1 text-center font-bold text-xs text-slate-400 bg-slate-50">{Math.round(zoom * 100)}%</div>
+                <button onClick={() => setZoom(Math.max(0.5, zoom - 0.2))} className="p-3 text-slate-600 hover:bg-slate-50 hover:text-amber-600 transition-colors border-t border-slate-100"><ZoomOut size={20} /></button>
+              </div>
+              <button onClick={clearCurrentPage} className="p-4 bg-white border border-red-200 text-red-500 hover:bg-red-50 rounded-xl shadow-lg transition-all active:scale-95 group">
+                <Trash2 size={24} className="group-hover:scale-110 transition-transform" />
+              </button>
+            </div>
+          </main>
+        </>
+      )}
+
+      {/* --- カスタム UI コンポーネント --- */}
+
+      {/* P2P ホスティング（共有元）モーダル */}
+      {shareMode === 'hosting' && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[500] p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 md:p-8 text-center animate-in zoom-in-95">
+            <div className="mx-auto bg-emerald-100 text-emerald-600 w-12 h-12 rounded-full flex items-center justify-center mb-3">
+              <Share2 size={24} />
+            </div>
+            <h3 className="font-bold text-xl mb-2 text-slate-800">デジタル教科書を共有</h3>
+            <p className="text-slate-500 font-bold text-xs mb-5">
+              以下のURLかQRコードを児童生徒に共有してください。<br/>
+              <span className="text-red-500">※全員が開き終わるまで、この画面は閉じないでください。</span>
+            </p>
+            
+            {shareUrl ? (
+              <>
+                <div className="flex justify-center mb-4">
+                  <div className="p-2 bg-white border border-slate-200 rounded-2xl shadow-sm">
+                    <canvas ref={qrCanvasRef} className="mx-auto" />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 bg-slate-100 p-2 rounded-xl mb-4 border border-slate-200">
+                  <input type="text" readOnly value={shareUrl} className="flex-1 bg-transparent border-none outline-none text-slate-600 text-xs font-mono px-2" />
+                  <button 
+                    onClick={() => { navigator.clipboard.writeText(shareUrl); showToast("URLをコピーしました！", "success"); }}
+                    className="p-2 bg-white rounded-lg shadow-sm text-emerald-600 hover:bg-emerald-50 transition-colors flex-shrink-0"
+                    title="URLをコピー"
+                  >
+                    <Copy size={18} />
+                  </button>
+                </div>
+                <div className="text-xs font-bold text-emerald-600 bg-emerald-50 py-2 px-4 rounded-full inline-block mb-6 animate-pulse">
+                  {shareStatus}
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col items-center gap-3 text-slate-500 mb-6">
+                <Loader2 className="animate-spin text-emerald-500" size={32} />
+                <span className="font-bold text-sm">{shareStatus}</span>
+              </div>
+            )}
+            
+            <button onClick={stopHosting} className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors">
+              共有を終了して閉じる
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* P2P 受信中モーダル */}
+      {shareMode === 'receiving' && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[500] p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 text-center flex flex-col items-center">
+             <Loader2 className="animate-spin text-emerald-500 mb-4" size={48} />
+             <h3 className="font-bold text-xl mb-2 text-slate-800">データを受信しています</h3>
+             <p className="text-slate-500 font-bold text-sm animate-pulse">{shareStatus}</p>
+          </div>
+        </div>
+      )}
+
+      {/* ショートカットキーモーダル */}
+      {showShortcuts && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[600] p-4 animate-in fade-in" onClick={() => setShowShortcuts(false)}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2">
+                <Info className="text-amber-500"/> ショートカットキー
+              </h3>
+              <button onClick={() => setShowShortcuts(false)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
+                <X size={20}/>
+              </button>
+            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-2 gap-y-4 gap-x-8 text-sm">
+                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                  <span className="text-slate-600 font-bold">次のページ</span>
+                  <kbd className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded-lg font-mono font-bold text-xs">→ / ↓</kbd>
+                </div>
+                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                  <span className="text-slate-600 font-bold">前のページ</span>
+                  <kbd className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded-lg font-mono font-bold text-xs">← / ↑</kbd>
+                </div>
+                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                  <span className="text-slate-600 font-bold">元に戻す</span>
+                  <kbd className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded-lg font-mono font-bold text-xs">Ctrl + Z</kbd>
+                </div>
+                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                  <span className="text-slate-600 font-bold">やり直し</span>
+                  <kbd className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded-lg font-mono font-bold text-xs">Ctrl + Y</kbd>
+                </div>
+                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                  <span className="text-slate-600 font-bold">選択モード</span>
+                  <kbd className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded-lg font-mono font-bold text-xs">V</kbd>
+                </div>
+                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                  <span className="text-slate-600 font-bold">えんぴつ</span>
+                  <kbd className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded-lg font-mono font-bold text-xs">P</kbd>
+                </div>
+                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                  <span className="text-slate-600 font-bold">マーカー</span>
+                  <kbd className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded-lg font-mono font-bold text-xs">H</kbd>
+                </div>
+                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                  <span className="text-slate-600 font-bold">けしごむ</span>
+                  <kbd className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded-lg font-mono font-bold text-xs">E</kbd>
+                </div>
+                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                  <span className="text-slate-600 font-bold">QR読み取り</span>
+                  <kbd className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded-lg font-mono font-bold text-xs">Q</kbd>
+                </div>
+                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                  <span className="text-slate-600 font-bold">削除</span>
+                  <kbd className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded-lg font-mono font-bold text-xs">Del / BS</kbd>
+                </div>
+              </div>
+              <div className="mt-6 text-center text-xs text-slate-500 font-bold">
+                「?」キーを押すことでも、この画面を開閉できます。
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* マイスタンプ作成モーダル */}
+      {showMyStampCreator && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[200] p-4 animate-in fade-in">
+           <form onSubmit={(e) => {
+             e.preventDefault();
+             const t = e.target.stampText.value, c = e.target.stampColor.value, s = e.target.stampShape.value;
+             if(!t) return;
+             const newStamps = [...myStamps, { text: t, color: c, shape: s }];
+             setMyStamps(newStamps); localStorage.setItem(DB_KEY_MYSTAMPS, JSON.stringify(newStamps));
+             setShowMyStampCreator(false); showToast("マイスタンプを保存しました", "success");
+           }} className="bg-white p-6 rounded-3xl shadow-2xl w-full max-w-sm animate-in zoom-in-95">
+              <h3 className="font-bold text-xl mb-5 text-slate-800 border-b pb-3 flex items-center gap-2"><Settings size={20} className="text-amber-500"/> マイスタンプ作成</h3>
+              <div className="mb-5">
+                <label className="block text-xs font-bold text-slate-500 mb-2">スタンプの文字 (1〜3文字推奨)</label>
+                <input name="stampText" type="text" maxLength={5} required placeholder="例: OK, 💮" className="w-full border-2 border-slate-200 rounded-xl p-3 font-bold focus:border-amber-400 outline-none transition-colors bg-slate-50 focus:bg-white"/>
+              </div>
+              <div className="mb-6 flex gap-4">
+                <div className="flex-1">
+                  <label className="block text-xs font-bold text-slate-500 mb-2">枠の形</label>
+                  <select name="stampShape" className="w-full border-2 border-slate-200 rounded-xl p-3 font-bold focus:border-amber-400 outline-none bg-slate-50 focus:bg-white cursor-pointer">
+                    <option value="none">枠なし</option>
+                    <option value="circle">丸 (◯)</option>
+                    <option value="square">四角 (□)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-2">色</label>
+                  <div className="border-2 border-slate-200 rounded-xl p-1 bg-slate-50 hover:bg-white transition-colors">
+                    <input name="stampColor" type="color" defaultValue="#ef4444" className="w-12 h-10 rounded-lg cursor-pointer border-0 p-0 bg-transparent"/>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-3 justify-end mt-2">
+                <button type="button" onClick={() => setShowMyStampCreator(false)} className="px-5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 font-bold text-slate-600 rounded-xl transition-all">キャンセル</button>
+                <button type="submit" className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 font-bold text-white rounded-xl transition-all shadow-md shadow-amber-500/30">保存して追加</button>
+              </div>
+           </form>
+        </div>
+      )}
+
+      {/* カスタム確認ダイアログ */}
+      {dialog && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[300] p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 md:p-8">
+              <h3 className="font-bold text-xl mb-3 text-slate-800 flex items-center gap-2">
+                {dialog.isDestructive ? <AlertCircle className="text-red-500"/> : <Info className="text-blue-500"/>}
+                {dialog.title}
+              </h3>
+              <p className="text-slate-600 font-medium leading-relaxed">{dialog.message}</p>
+            </div>
+            <div className="bg-slate-50 px-6 py-4 flex justify-end gap-3 border-t border-slate-100">
+              <button onClick={() => setDialog(null)} className="px-5 py-2.5 bg-white border border-slate-200 hover:bg-slate-100 font-bold text-slate-600 rounded-xl transition-all">キャンセル</button>
+              <button onClick={() => { dialog.onConfirm(); setDialog(null); }} className={`px-5 py-2.5 font-bold text-white rounded-xl transition-all shadow-lg ${dialog.isDestructive ? 'bg-red-500 hover:bg-red-600 shadow-red-500/30' : 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/30'}`}>
+                {dialog.confirmText}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* カスタムトースト通知 */}
+      {toast && (
+        <div className={`fixed bottom-6 right-6 md:bottom-10 md:right-10 px-5 py-3.5 rounded-2xl shadow-xl font-bold flex items-center gap-3 animate-in slide-in-from-bottom-5 z-[400] ${toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-slate-800 text-white'}`}>
+          {toast.type === 'error' ? <AlertCircle size={20}/> : <CheckCircle2 size={20} className="text-green-400"/>}
+          {toast.message}
+        </div>
+      )}
+
+      <Footer />
+    </div>
+  );
+}
