@@ -6,7 +6,7 @@ import {
   StickyNote, Timer, Play, Pause, RotateCcw,
   Link as LinkIcon, Volume2, Settings, X,
   Undo2, Redo2, AlertCircle, CheckCircle2, Info, QrCode,
-  Share2, Copy, Loader2
+  Share2, Copy, Loader2, Download, Upload, Cloud
 } from 'lucide-react';
 
 // ==========================================
@@ -21,6 +21,9 @@ const DB_KEY_TEXTBOOKS = "digital_textbooks_v3";
 const DB_KEY_DRAWINGS = "digital_textbook_drawings_v3";
 const DB_KEY_MYSTAMPS = "digital_textbook_mystamps";
 const DB_KEY_LAST_OPENED = "digital_textbook_last_opened";
+
+const BACKUP_FORMAT = "digital-textbook-backup";
+const BACKUP_VERSION = 1;
 
 // スタンプのカテゴリとデータ
 const STAMP_CATEGORIES = [
@@ -781,6 +784,153 @@ export default function App() {
     finally { setIsProcessing(false); e.target.value = null; }
   };
 
+  // --- Backup (Export / Import) ---
+  const [isExporting, setIsExporting] = useState(false);
+  const [importPreview, setImportPreview] = useState(null); // { fileName, data, summary }
+  const importFileInputRef = useRef(null);
+
+  const handleExportBackup = useCallback(async () => {
+    if (!isDataLoaded) return;
+    if (textbooks.length === 0) {
+      showToast("エクスポートする教科書がありません", "error");
+      return;
+    }
+    setIsExporting(true);
+    try {
+      if (fabricRef.current && currentTextbookId !== null) {
+        if (!drawingsRef.current[currentTextbookId]) drawingsRef.current[currentTextbookId] = {};
+        drawingsRef.current[currentTextbookId][currentPage] = fabricRef.current.toJSON(['linkType', 'linkTarget', 'stampType']);
+        try { await window.idbKeyval.set(DB_KEY_DRAWINGS, drawingsRef.current); } catch (e) {}
+      }
+
+      const payload = {
+        format: BACKUP_FORMAT,
+        version: BACKUP_VERSION,
+        exportedAt: new Date().toISOString(),
+        appName: APP_NAME,
+        textbooks,
+        drawings: drawingsRef.current || {},
+        myStamps,
+      };
+      const json = JSON.stringify(payload);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const ts = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 16);
+      a.href = url;
+      a.download = `digital-textbook-backup-${ts}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showToast("バックアップファイルをダウンロードしました", "success");
+    } catch (err) {
+      console.error(err);
+      showToast("エクスポートに失敗しました", "error");
+    } finally {
+      setIsExporting(false);
+    }
+  }, [isDataLoaded, textbooks, myStamps, currentTextbookId, currentPage, showToast]);
+
+  const handleImportFileSelected = useCallback(async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = null;
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!data || data.format !== BACKUP_FORMAT || !Array.isArray(data.textbooks)) {
+        showToast("このファイルはバックアップ形式ではありません", "error");
+        return;
+      }
+      const tbCount = data.textbooks.length;
+      const pageCount = data.textbooks.reduce((sum, tb) => sum + (Array.isArray(tb.pages) ? tb.pages.length : 0), 0);
+      const stampCount = Array.isArray(data.myStamps) ? data.myStamps.length : 0;
+      const exportedAt = data.exportedAt ? new Date(data.exportedAt).toLocaleString('ja-JP') : "不明";
+      setImportPreview({
+        fileName: file.name,
+        data,
+        summary: { tbCount, pageCount, stampCount, exportedAt },
+      });
+    } catch (err) {
+      console.error(err);
+      showToast("ファイルの読み込みに失敗しました", "error");
+    }
+  }, [showToast]);
+
+  const applyImport = useCallback(async (mode) => {
+    if (!importPreview) return;
+    const { data } = importPreview;
+    setIsProcessing(true);
+    try {
+      const incomingBooks = Array.isArray(data.textbooks) ? data.textbooks : [];
+      const incomingDrawings = data.drawings && typeof data.drawings === 'object' ? data.drawings : {};
+      const incomingStamps = Array.isArray(data.myStamps) ? data.myStamps : [];
+
+      let newTextbooks;
+      let newDrawings;
+      let newMyStamps;
+
+      if (mode === 'replace') {
+        newTextbooks = incomingBooks;
+        newDrawings = incomingDrawings;
+        newMyStamps = incomingStamps;
+      } else {
+        const existingIds = new Set(textbooks.map(tb => tb.id));
+        const idRemap = {};
+        const merged = [...textbooks];
+        for (const tb of incomingBooks) {
+          let newId = tb.id;
+          if (existingIds.has(newId)) {
+            newId = 'tb_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+            idRemap[tb.id] = newId;
+          }
+          existingIds.add(newId);
+          merged.push({ ...tb, id: newId, title: idRemap[tb.id] ? `${tb.title} (取込)` : tb.title });
+        }
+        newTextbooks = merged;
+
+        newDrawings = { ...(drawingsRef.current || {}) };
+        for (const [origId, pages] of Object.entries(incomingDrawings)) {
+          const targetId = idRemap[origId] || origId;
+          newDrawings[targetId] = pages;
+        }
+
+        const stampKey = (s) => `${s.text}|${s.color}|${s.shape}`;
+        const existingKeys = new Set(myStamps.map(stampKey));
+        const mergedStamps = [...myStamps];
+        for (const s of incomingStamps) {
+          if (s && typeof s === 'object' && !existingKeys.has(stampKey(s))) {
+            mergedStamps.push(s);
+            existingKeys.add(stampKey(s));
+          }
+        }
+        newMyStamps = mergedStamps;
+      }
+
+      await window.idbKeyval.set(DB_KEY_TEXTBOOKS, newTextbooks);
+      await window.idbKeyval.set(DB_KEY_DRAWINGS, newDrawings);
+      localStorage.setItem(DB_KEY_MYSTAMPS, JSON.stringify(newMyStamps));
+
+      drawingsRef.current = newDrawings;
+      setTextbooks(newTextbooks);
+      setMyStamps(newMyStamps);
+
+      if (mode === 'replace') {
+        setCurrentTextbookId(null);
+        setCurrentPage(0);
+      }
+
+      showToast(mode === 'replace' ? "データを置き換えました" : "データを追加で取り込みました", "success");
+    } catch (err) {
+      console.error(err);
+      showToast("インポートに失敗しました", "error");
+    } finally {
+      setIsProcessing(false);
+      setImportPreview(null);
+    }
+  }, [importPreview, textbooks, myStamps, showToast]);
+
   const deleteTextbook = (id, e) => {
     e.stopPropagation();
     showConfirm(
@@ -1312,7 +1462,42 @@ export default function App() {
       {!currentTextbookId && (
         <main className="flex-grow overflow-auto p-6 md:p-10 bg-amber-50/40">
           <div className="max-w-6xl mx-auto animate-in fade-in zoom-in-95 duration-300">
-            <h2 className="text-3xl font-bold text-slate-800 mb-8 flex items-center gap-3 drop-shadow-sm"><BookOpen size={36} className="text-amber-500" /> わたしのプリント・教科書</h2>
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+              <h2 className="text-3xl font-bold text-slate-800 flex items-center gap-3 drop-shadow-sm"><BookOpen size={36} className="text-amber-500" /> わたしのプリント・教科書</h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={handleExportBackup}
+                  disabled={isExporting || textbooks.length === 0}
+                  title="教科書・書き込みをJSONファイルとして書き出し、Googleドライブ等に保存できます"
+                  className="flex items-center gap-1.5 bg-white border-2 border-blue-200 hover:border-blue-400 hover:bg-blue-50 text-blue-600 font-bold px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                  バックアップを書き出す
+                </button>
+                <button
+                  onClick={() => importFileInputRef.current && importFileInputRef.current.click()}
+                  disabled={isProcessing}
+                  title="Googleドライブ等から取得したバックアップJSONを読み込みます"
+                  className="flex items-center gap-1.5 bg-white border-2 border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50 text-emerald-600 font-bold px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Upload size={16} />
+                  バックアップを取り込む
+                </button>
+                <input
+                  ref={importFileInputRef}
+                  type="file"
+                  accept="application/json,.json"
+                  className="hidden"
+                  onChange={handleImportFileSelected}
+                />
+              </div>
+            </div>
+            <div className="mb-6 flex items-start gap-2 text-xs font-bold text-slate-500 bg-amber-50/70 border border-amber-200 rounded-xl p-3">
+              <Cloud size={16} className="text-amber-500 mt-0.5 shrink-0" />
+              <span>
+                書き出したJSONファイルをGoogleドライブに保存しておけば、別の端末でログインして同じファイルを「取り込む」ことで、教科書・書き込み・マイスタンプをまるごと復元できます。
+              </span>
+            </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
               <label className="bg-white border-4 border-dashed border-amber-200 hover:border-amber-400 rounded-3xl flex flex-col items-center justify-center p-6 cursor-pointer hover:bg-amber-50 transition-all active:scale-95 min-h-[260px] shadow-sm hover:shadow-md">
                 {isProcessing ? (
@@ -1672,6 +1857,65 @@ export default function App() {
               <div className="mt-6 text-center text-xs text-slate-500 font-bold">
                 「?」キーを押すことでも、この画面を開閉できます。
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* バックアップ取り込み確認モーダル */}
+      {importPreview && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[400] p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95">
+            <div className="p-6 md:p-7 border-b border-slate-100 bg-slate-50">
+              <h3 className="font-bold text-xl mb-1 text-slate-800 flex items-center gap-2">
+                <Upload size={20} className="text-emerald-600" /> バックアップを取り込む
+              </h3>
+              <p className="text-xs font-bold text-slate-500 truncate" title={importPreview.fileName}>
+                {importPreview.fileName}
+              </p>
+            </div>
+            <div className="p-6 md:p-7">
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 mb-5 text-sm">
+                <div className="flex justify-between py-1"><span className="text-slate-500 font-bold">書き出し日時</span><span className="text-slate-700 font-bold">{importPreview.summary.exportedAt}</span></div>
+                <div className="flex justify-between py-1"><span className="text-slate-500 font-bold">教科書の数</span><span className="text-slate-700 font-bold">{importPreview.summary.tbCount} 冊</span></div>
+                <div className="flex justify-between py-1"><span className="text-slate-500 font-bold">合計ページ数</span><span className="text-slate-700 font-bold">{importPreview.summary.pageCount} ページ</span></div>
+                <div className="flex justify-between py-1"><span className="text-slate-500 font-bold">マイスタンプ</span><span className="text-slate-700 font-bold">{importPreview.summary.stampCount} 個</span></div>
+              </div>
+              <p className="text-xs font-bold text-slate-500 leading-relaxed mb-1">取り込み方法を選んでください。</p>
+              <ul className="text-xs font-bold text-slate-500 leading-relaxed list-disc pl-5 mb-2">
+                <li><span className="text-emerald-600">追加で取り込む</span>: 今ある教科書はそのまま残ります（推奨）</li>
+                <li><span className="text-red-500">置き換える</span>: 現在のすべての教科書・書き込みが消えます</li>
+              </ul>
+            </div>
+            <div className="bg-slate-50 px-6 py-4 flex flex-wrap justify-end gap-2 border-t border-slate-100">
+              <button
+                onClick={() => setImportPreview(null)}
+                disabled={isProcessing}
+                className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-100 font-bold text-slate-600 rounded-xl transition-all disabled:opacity-40"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={() => showConfirm(
+                  "すべて置き換えますか？",
+                  "現在の教科書・書き込み・マイスタンプはすべて削除され、バックアップの内容に置き換わります。",
+                  () => applyImport('replace'),
+                  "置き換える",
+                  true
+                )}
+                disabled={isProcessing}
+                className="px-4 py-2.5 bg-white border-2 border-red-200 hover:bg-red-50 font-bold text-red-600 rounded-xl transition-all disabled:opacity-40"
+              >
+                置き換える
+              </button>
+              <button
+                onClick={() => applyImport('merge')}
+                disabled={isProcessing}
+                className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 font-bold text-white rounded-xl transition-all shadow-md shadow-emerald-500/30 disabled:opacity-40 flex items-center gap-2"
+              >
+                {isProcessing ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                追加で取り込む
+              </button>
             </div>
           </div>
         </div>
