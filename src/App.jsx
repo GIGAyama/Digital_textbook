@@ -224,6 +224,48 @@ const hexToRgba = (hex, alpha) => {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
+const CUSTOM_JSON_PROPS = ['linkType', 'linkTarget', 'stampType'];
+
+// 背景画像(ページ画像そのもの)は毎回ページ表示時に再設定するため、
+// 保存データ・履歴には含めない(保存容量と処理時間を大幅に削減)
+const serializeCanvas = (canvas) => {
+  const json = canvas.toJSON(CUSTOM_JSON_PROPS);
+  delete json.backgroundImage;
+  return json;
+};
+
+const isSafeUrl = (url) => /^https?:\/\//i.test(url);
+
+// ツールモードをキャンバスに適用する(初期化時とモード変更時で共通)
+const applyCanvasMode = (canvas, mode, color) => {
+  canvas.isDrawingMode = false;
+  canvas.selection = false;
+  canvas.defaultCursor = 'crosshair';
+  canvas.hoverCursor = 'crosshair';
+
+  if (mode === 'pencil') {
+    canvas.isDrawingMode = true;
+    canvas.freeDrawingBrush = new window.fabric.PencilBrush(canvas);
+    canvas.freeDrawingBrush.color = color;
+    canvas.freeDrawingBrush.width = 4;
+  } else if (mode === 'highlighter') {
+    canvas.isDrawingMode = true;
+    canvas.freeDrawingBrush = new window.fabric.PencilBrush(canvas);
+    canvas.freeDrawingBrush.color = hexToRgba(color, 0.4);
+    canvas.freeDrawingBrush.width = 24;
+  } else if (mode === 'eraser') {
+    canvas.defaultCursor = 'cell';
+    canvas.hoverCursor = 'cell';
+  } else if (mode === 'qr') {
+    canvas.defaultCursor = 'crosshair';
+    canvas.hoverCursor = 'crosshair';
+  } else if (mode === 'select') {
+    canvas.defaultCursor = 'default';
+    canvas.hoverCursor = 'move';
+    canvas.selection = true;
+  }
+};
+
 const createMathShape = (subtype, x, y) => {
   if (!window.fabric) return null;
   const fabric = window.fabric;
@@ -472,9 +514,11 @@ export default function App() {
   useEffect(() => { colorRef.current = color; }, [color]);
 
   // --- Utility Functions ---
+  const toastTimeoutRef = useRef(null);
   const showToast = useCallback((message, type = 'info') => {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = setTimeout(() => setToast(null), 3000);
   }, []);
 
   const showConfirm = useCallback((title, message, onConfirm, confirmText = "実行する", isDestructive = false) => {
@@ -557,8 +601,12 @@ export default function App() {
       }
 
       if (decodedUrl) {
-        window.open(decodedUrl, '_blank');
-        showToast("QRコードを読み取りました", "success");
+        if (isSafeUrl(decodedUrl)) {
+          window.open(decodedUrl, '_blank', 'noopener');
+          showToast("QRコードを読み取りました", "success");
+        } else {
+          showToast(`QRコードの内容: ${decodedUrl}`, "info");
+        }
       } else {
         showToast("QRコードが見つかりません。鮮明なPDFを使用するか、正確に囲んでください。", "error");
       }
@@ -683,6 +731,16 @@ export default function App() {
           setShareMode('none');
         });
       });
+
+      // ホストが見つからない・シグナリングサーバーに繋がらない場合など
+      // (これがないと受信モーダルが永久に閉じられなくなる)
+      peer.on('error', (err) => {
+        console.error("Peer接続エラー:", err);
+        showToast("ホストに接続できませんでした。共有元の画面が開いているか確認してください。", "error");
+        window.history.replaceState({}, document.title, window.location.pathname);
+        setShareMode('none');
+        peer.destroy();
+      });
     }
   }, [isDataLoaded, scriptsLoaded, showToast, shareMode]);
 
@@ -693,7 +751,7 @@ export default function App() {
     // 描画データを最新にするため強制セーブ
     if(fabricRef.current) {
       if (!drawingsRef.current[currentTextbookId]) drawingsRef.current[currentTextbookId] = {};
-      drawingsRef.current[currentTextbookId][currentPage] = fabricRef.current.toJSON(['linkType', 'linkTarget', 'stampType']);
+      drawingsRef.current[currentTextbookId][currentPage] = serializeCanvas(fabricRef.current);
     }
 
     setShareMode('hosting');
@@ -770,7 +828,9 @@ export default function App() {
         canvas.width = viewport.width; canvas.height = viewport.height;
         await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
         newPages.push(canvas.toDataURL('image/jpeg', 0.8));
+        page.cleanup();
       }
+      pdf.destroy();
       const newId = 'tb_' + Date.now();
       const newTextbook = { id: newId, title: file.name.replace(/\.[^/.]+$/, ""), coverImage: newPages[0], pages: newPages };
       const newTextbooks = [...textbooks, newTextbook];
@@ -799,7 +859,7 @@ export default function App() {
     try {
       if (fabricRef.current && currentTextbookId !== null) {
         if (!drawingsRef.current[currentTextbookId]) drawingsRef.current[currentTextbookId] = {};
-        drawingsRef.current[currentTextbookId][currentPage] = fabricRef.current.toJSON(['linkType', 'linkTarget', 'stampType']);
+        drawingsRef.current[currentTextbookId][currentPage] = serializeCanvas(fabricRef.current);
         try { await window.idbKeyval.set(DB_KEY_DRAWINGS, drawingsRef.current); } catch (e) {}
       }
 
@@ -944,6 +1004,12 @@ export default function App() {
           delete drawingsRef.current[id];
           await window.idbKeyval.set(DB_KEY_DRAWINGS, drawingsRef.current);
         }
+        setPageHistory(prev => {
+          const next = { ...prev };
+          delete next[id];
+          localStorage.setItem('digital_textbook_page_history', JSON.stringify(next));
+          return next;
+        });
         showToast("教科書を削除しました", "success");
       },
       "削除する",
@@ -954,7 +1020,7 @@ export default function App() {
   // --- History & AutoSave System ---
   const saveHistory = useCallback(() => {
     if (isHistoryProcessing.current || !fabricRef.current) return;
-    const json = fabricRef.current.toJSON(['linkType', 'linkTarget', 'stampType']);
+    const json = serializeCanvas(fabricRef.current);
     historyRef.current.push(JSON.stringify(json));
     redoStackRef.current = [];
     if (historyRef.current.length > 30) historyRef.current.shift();
@@ -966,10 +1032,23 @@ export default function App() {
     saveTimeoutRef.current = setTimeout(async () => {
       if (!fabricRef.current || !currentTextbookId) return;
       if (!drawingsRef.current[currentTextbookId]) drawingsRef.current[currentTextbookId] = {};
-      drawingsRef.current[currentTextbookId][currentPage] = fabricRef.current.toJSON(['linkType', 'linkTarget', 'stampType']);
+      drawingsRef.current[currentTextbookId][currentPage] = serializeCanvas(fabricRef.current);
       try { await window.idbKeyval.set(DB_KEY_DRAWINGS, drawingsRef.current); } catch (e) { }
     }, 800); // 800ms debounce
   }, [currentTextbookId, currentPage]);
+
+  // 履歴データには背景画像が含まれないため、復元後に元の背景を再設定する
+  const restoreCanvasState = useCallback((state) => {
+    const canvas = fabricRef.current;
+    const bg = canvas.backgroundImage;
+    canvas.loadFromJSON(state, () => {
+      if (bg) canvas.setBackgroundImage(bg, () => {});
+      canvas.renderAll();
+      isHistoryProcessing.current = false;
+      setHistoryTrigger(prev => prev + 1);
+      triggerAutoSave();
+    });
+  }, [triggerAutoSave]);
 
   const handleUndo = useCallback(() => {
     if (historyRef.current.length <= 1 || !fabricRef.current) return;
@@ -977,28 +1056,16 @@ export default function App() {
     const currentState = historyRef.current.pop();
     redoStackRef.current.push(currentState);
     const previousState = historyRef.current[historyRef.current.length - 1];
-    
-    fabricRef.current.loadFromJSON(previousState, () => {
-      fabricRef.current.renderAll();
-      isHistoryProcessing.current = false;
-      setHistoryTrigger(prev => prev + 1);
-      triggerAutoSave();
-    });
-  }, [triggerAutoSave]);
+    restoreCanvasState(previousState);
+  }, [restoreCanvasState]);
 
   const handleRedo = useCallback(() => {
     if (redoStackRef.current.length === 0 || !fabricRef.current) return;
     isHistoryProcessing.current = true;
     const nextState = redoStackRef.current.pop();
     historyRef.current.push(nextState);
-    
-    fabricRef.current.loadFromJSON(nextState, () => {
-      fabricRef.current.renderAll();
-      isHistoryProcessing.current = false;
-      setHistoryTrigger(prev => prev + 1);
-      triggerAutoSave();
-    });
-  }, [triggerAutoSave]);
+    restoreCanvasState(nextState);
+  }, [restoreCanvasState]);
 
   // --- Fabric.js Setup ---
   useEffect(() => {
@@ -1015,38 +1082,8 @@ export default function App() {
     if (!fabricRef.current && canvasRef.current) {
       fabricRef.current = new window.fabric.Canvas(canvasRef.current, { preserveObjectStacking: true, selection: true });
 
-      // ツールモードの初期化関数
-      const initCanvasMode = (canvas, currentMode, currentColor) => {
-        canvas.isDrawingMode = false;
-        canvas.selection = false;
-        canvas.defaultCursor = 'crosshair';
-        canvas.hoverCursor = 'crosshair';
-
-        if (currentMode === 'pencil') {
-          canvas.isDrawingMode = true;
-          canvas.freeDrawingBrush = new window.fabric.PencilBrush(canvas);
-          canvas.freeDrawingBrush.color = currentColor;
-          canvas.freeDrawingBrush.width = 4;
-        } else if (currentMode === 'highlighter') {
-          canvas.isDrawingMode = true;
-          canvas.freeDrawingBrush = new window.fabric.PencilBrush(canvas);
-          canvas.freeDrawingBrush.color = hexToRgba(currentColor, 0.4);
-          canvas.freeDrawingBrush.width = 24;
-        } else if (currentMode === 'eraser') {
-          canvas.defaultCursor = 'cell'; 
-          canvas.hoverCursor = 'cell';
-        } else if (currentMode === 'qr') {
-          canvas.defaultCursor = 'crosshair';
-          canvas.hoverCursor = 'crosshair';
-        } else if (currentMode === 'select') {
-          canvas.defaultCursor = 'default';
-          canvas.hoverCursor = 'move';
-          canvas.selection = true;
-        }
-      };
-
       // 初期化時に現在のモードを強制的に適用
-      initCanvasMode(fabricRef.current, modeRef.current, colorRef.current);
+      applyCanvasMode(fabricRef.current, modeRef.current, colorRef.current);
 
       // Events for History & Save
       fabricRef.current.on('path:created', () => { saveHistory(); triggerAutoSave(); });
@@ -1063,7 +1100,7 @@ export default function App() {
       // Interactions (Links & Text)
       fabricRef.current.on('mouse:dblclick', (o) => {
         if (!o.target) return;
-        if (o.target.linkType === 'url') window.open(o.target.linkTarget, '_blank');
+        if (o.target.linkType === 'url') { if (isSafeUrl(o.target.linkTarget)) window.open(o.target.linkTarget, '_blank', 'noopener'); }
         else if (o.target.linkType === 'audio') new window.Audio(o.target.linkTarget).play().catch(() => showToast("音声を再生できませんでした", "error"));
         else if (o.target.type === 'i-text' || o.target.type === 'textbox') { o.target.enterEditing(); o.target.selectAll(); }
       });
@@ -1183,7 +1220,7 @@ export default function App() {
 
       const loadData = () => {
         isHistoryProcessing.current = true;
-        historyRef.current = [JSON.stringify(canvas.toJSON(['linkType', 'linkTarget', 'stampType']))];
+        historyRef.current = [JSON.stringify(serializeCanvas(canvas))];
         redoStackRef.current = [];
         setHistoryTrigger(prev => prev + 1);
         isHistoryProcessing.current = false;
@@ -1192,6 +1229,8 @@ export default function App() {
       if (drawingsRef.current[currentTextbookId]?.[currentPage]) {
         canvas.loadFromJSON(drawingsRef.current[currentTextbookId][currentPage], () => {
           if (isCancelled) return;
+          // 保存データに背景画像は含まれないため、読み込み後に再設定する
+          canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas));
           canvas.renderAll();
           loadData();
         });
@@ -1210,35 +1249,7 @@ export default function App() {
   // --- Tool Modes ---
   useEffect(() => {
     if (!fabricRef.current) return;
-    const canvas = fabricRef.current;
-    
-    // ツールモードの初期化
-    canvas.isDrawingMode = false;
-    canvas.selection = false;
-    canvas.defaultCursor = 'crosshair';
-    canvas.hoverCursor = 'crosshair';
-
-    if (mode === 'pencil') {
-      canvas.isDrawingMode = true;
-      canvas.freeDrawingBrush = new window.fabric.PencilBrush(canvas);
-      canvas.freeDrawingBrush.color = color;
-      canvas.freeDrawingBrush.width = 4;
-    } else if (mode === 'highlighter') {
-      canvas.isDrawingMode = true;
-      canvas.freeDrawingBrush = new window.fabric.PencilBrush(canvas);
-      canvas.freeDrawingBrush.color = hexToRgba(color, 0.4);
-      canvas.freeDrawingBrush.width = 24;
-    } else if (mode === 'eraser') {
-      canvas.defaultCursor = 'cell'; 
-      canvas.hoverCursor = 'cell';
-    } else if (mode === 'qr') {
-      canvas.defaultCursor = 'crosshair';
-      canvas.hoverCursor = 'crosshair';
-    } else if (mode === 'select') {
-      canvas.defaultCursor = 'default';
-      canvas.hoverCursor = 'move';
-      canvas.selection = true;
-    }
+    applyCanvasMode(fabricRef.current, mode, color);
   }, [mode, color]);
 
   // --- Add Objects ---
@@ -1308,6 +1319,13 @@ export default function App() {
     addObjectToCenter(finalObj);
   };
 
+  const deleteMyStamp = (idx) => {
+    const newStamps = myStamps.filter((_, i) => i !== idx);
+    setMyStamps(newStamps);
+    localStorage.setItem(DB_KEY_MYSTAMPS, JSON.stringify(newStamps));
+    showToast("マイスタンプを削除しました", "success");
+  };
+
   const addStickyNote = (bgColor) => {
     const sticky = new window.fabric.Textbox('メモ', {
       width: 200, fontSize: 24, fill: '#000', fontFamily: 'Zen Maru Gothic',
@@ -1321,9 +1339,11 @@ export default function App() {
   const addLinkOrAudio = (type) => {
     closeAllMenus();
     const isUrl = type === 'url';
-    const url = window.prompt(isUrl ? 'リンク先のURLを入力してください' : '音声ファイルのURLを入力してください');
+    let url = window.prompt(isUrl ? 'リンク先のURLを入力してください' : '音声ファイルのURLを入力してください');
     if (!url) return;
-    
+    url = url.trim();
+    if (!isSafeUrl(url)) url = 'https://' + url;
+
     const textObj = new window.fabric.Text(isUrl ? '🔗' : '🔊', { fontSize: 24, originX: 'center', originY: 'center' });
     const circleObj = new window.fabric.Circle({ radius: 24, fill: isUrl ? '#e0f2fe' : '#fce7f3', stroke: isUrl ? '#0284c7' : '#db2777', strokeWidth: 2, originX: 'center', originY: 'center', shadow: new window.fabric.Shadow({ color: 'rgba(0,0,0,0.1)', blur: 5, offsetY: 2 }) });
     const group = new window.fabric.Group([circleObj, textObj], { originX: 'center', originY: 'center', linkType: type, linkTarget: url });
