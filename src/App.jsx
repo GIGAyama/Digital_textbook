@@ -38,18 +38,22 @@ const STAMP_CATEGORIES = [
 
 const STAMPS_DATA = {
   'eval': [
-    { label: 'はなまる', icon: '💮', color: 'red', type: 'text' },
-    { label: '100点', icon: '💯', color: 'red', type: 'text' },
-    { label: '二重丸', icon: '◎', color: 'red', type: 'text' },
-    { label: 'まる', icon: '〇', color: 'red', type: 'text' },
-    { label: 'チェック', icon: '✔', color: 'red', type: 'text' },
+    { label: 'はなまる', type: 'premium', subtype: 'hanamaru' },
+    { label: 'たいへんよくできました', type: 'premium', subtype: 'seal-taihen' },
+    { label: 'よくできました', type: 'premium', subtype: 'seal-yoku' },
+    { label: 'がんばりました', type: 'premium', subtype: 'seal-ganbari' },
+    { label: 'みました', type: 'premium', subtype: 'seal-mimashita' },
+    { label: '合格', type: 'premium', subtype: 'seal-goukaku' },
+    { label: '100点', type: 'premium', subtype: 'hyakuten' },
+    { label: '二重丸', type: 'premium', subtype: 'double-circle' },
+    { label: 'まる', type: 'premium', subtype: 'circle' },
+    { label: 'さんかく', type: 'premium', subtype: 'triangle' },
+    { label: 'チェック', type: 'premium', subtype: 'check' },
     { label: 'いいね', icon: '👍', color: '#1a73e8', type: 'text' },
     { label: '見ました', icon: '👀', color: 'green', type: 'text' },
-    { label: 'OK', icon: '🆗', color: 'orange', type: 'text' },
-    { label: '合格', icon: '🈴', color: 'red', type: 'text' },
-    { label: '満点', icon: '🈵', color: 'red', type: 'text' },
     { label: 'すごい', icon: '✨', color: '#F1C40F', type: 'text' },
-    { label: 'ナイス', icon: '👏', color: '#E67E22', type: 'text' }
+    { label: 'ナイス', icon: '👏', color: '#E67E22', type: 'text' },
+    { label: '満点', icon: '💯', color: 'red', type: 'text' }
   ],
   'jp': [
     { label: 'いつ', text: 'い\nつ', type: 'vertical', color: 'blue' },
@@ -224,6 +228,138 @@ const hexToRgba = (hex, alpha) => {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
+// ==========================================
+// 評価スタンプ (ベクター描画・高品質版)
+// 絵文字と違い端末を問わず同じ見た目で、拡大しても劣化しない
+// ==========================================
+const STAMP_RED = '#e0392f';
+
+// 中心(cx,cy)から外側へ向かう渦巻きのSVGパスを生成する
+const buildSpiralPath = (cx, cy, rStart, rEnd, turns) => {
+  const steps = Math.round(turns * 36);
+  let d = '';
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const angle = t * turns * Math.PI * 2 - Math.PI / 2;
+    const r = rStart + (rEnd - rStart) * t;
+    const x = cx + r * Math.cos(angle);
+    const y = cy + r * Math.sin(angle);
+    d += `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)} `;
+  }
+  return d.trim();
+};
+
+// 花びら状(スカラップ)の縁取りパスを生成する
+const buildFlowerPath = (cx, cy, r, petals, bulge) => {
+  let d = '';
+  for (let i = 0; i <= petals; i++) {
+    const a = (i / petals) * Math.PI * 2 - Math.PI / 2;
+    const x = (cx + r * Math.cos(a)).toFixed(1);
+    const y = (cy + r * Math.sin(a)).toFixed(1);
+    if (i === 0) { d += `M ${x} ${y} `; continue; }
+    const am = ((i - 0.5) / petals) * Math.PI * 2 - Math.PI / 2;
+    const qx = (cx + (r + bulge) * Math.cos(am)).toFixed(1);
+    const qy = (cy + (r + bulge) * Math.sin(am)).toFixed(1);
+    d += `Q ${qx} ${qy} ${x} ${y} `;
+  }
+  return d.trim() + ' Z';
+};
+
+const HANAMARU_FLOWER_PATH = buildFlowerPath(60, 60, 40, 9, 15);
+const HANAMARU_SPIRAL_PATH = buildSpiralPath(60, 60, 3, 27, 2.6);
+const SEAL_FLOWER_PATH = buildFlowerPath(60, 60, 46, 12, 8);
+const CHECK_PATH = 'M 24 62 L 50 88 L 96 30';
+const TRIANGLE_PATH = 'M 60 18 L 101 94 L 19 94 Z';
+
+// 検印(ハンコ)型スタンプの定義。lines を縁取り内に配置する
+const SEAL_STAMPS = {
+  'seal-taihen': { lines: ['たいへん', 'よく', 'できました'], border: 'flower', fontSize: 17 },
+  'seal-yoku': { lines: ['よく', 'できました'], border: 'flower', fontSize: 18 },
+  'seal-ganbari': { lines: ['がんばり', 'ました'], border: 'circle', fontSize: 20 },
+  'seal-mimashita': { lines: ['みました'], border: 'circle', fontSize: 21 },
+  'seal-goukaku': { lines: ['合', '格'], border: 'square', fontSize: 30 },
+  'hyakuten': { lines: ['100点'], border: 'double', fontSize: 24 },
+};
+
+// fabric.js オブジェクトとして評価スタンプを組み立てる
+const createPremiumStamp = (subtype) => {
+  if (!window.fabric) return null;
+  const fabric = window.fabric;
+  const stroke = {
+    fill: 'transparent', stroke: STAMP_RED, strokeLineCap: 'round', strokeLineJoin: 'round',
+    originX: 'center', originY: 'center', left: 0, top: 0,
+  };
+  const parts = [];
+
+  const seal = SEAL_STAMPS[subtype];
+  if (seal) {
+    if (seal.border === 'flower') parts.push(new fabric.Path(SEAL_FLOWER_PATH, { ...stroke, strokeWidth: 4.5 }));
+    else if (seal.border === 'double') {
+      parts.push(new fabric.Circle({ radius: 50, ...stroke, strokeWidth: 4.5 }));
+      parts.push(new fabric.Circle({ radius: 42, ...stroke, strokeWidth: 3 }));
+    }
+    else if (seal.border === 'square') parts.push(new fabric.Rect({ width: 78, height: 78, rx: 10, ry: 10, ...stroke, strokeWidth: 4.5 }));
+    else parts.push(new fabric.Circle({ radius: 50, ...stroke, strokeWidth: 4.5 }));
+    parts.push(new fabric.Text(seal.lines.join('\n'), {
+      fontSize: seal.fontSize, fill: STAMP_RED, fontFamily: 'Zen Maru Gothic', fontWeight: '700',
+      textAlign: 'center', lineHeight: 1.12, originX: 'center', originY: 'center', left: 0, top: 0,
+    }));
+  } else if (subtype === 'hanamaru') {
+    parts.push(new fabric.Path(HANAMARU_FLOWER_PATH, { ...stroke, strokeWidth: 6 }));
+    parts.push(new fabric.Path(HANAMARU_SPIRAL_PATH, { ...stroke, strokeWidth: 5 }));
+  } else if (subtype === 'double-circle') {
+    parts.push(new fabric.Circle({ radius: 46, ...stroke, strokeWidth: 6 }));
+    parts.push(new fabric.Circle({ radius: 31, ...stroke, strokeWidth: 5 }));
+  } else if (subtype === 'circle') {
+    parts.push(new fabric.Circle({ radius: 46, ...stroke, strokeWidth: 6 }));
+  } else if (subtype === 'triangle') {
+    parts.push(new fabric.Path(TRIANGLE_PATH, { ...stroke, strokeWidth: 6 }));
+  } else if (subtype === 'check') {
+    parts.push(new fabric.Path(CHECK_PATH, { ...stroke, strokeWidth: 11 }));
+  } else {
+    return null;
+  }
+
+  return new fabric.Group(parts, { originX: 'center', originY: 'center', opacity: 0.95 });
+};
+
+// スタンプ一覧メニューでのプレビュー (キャンバス上と同じ形状データを共有)
+const StampPreview = ({ subtype }) => {
+  const seal = SEAL_STAMPS[subtype];
+  const strokeProps = { fill: 'none', stroke: STAMP_RED, strokeLinecap: 'round', strokeLinejoin: 'round' };
+  return (
+    <svg viewBox="0 0 120 120" className="w-9 h-9" aria-hidden="true">
+      {subtype === 'hanamaru' && (<>
+        <path d={HANAMARU_FLOWER_PATH} {...strokeProps} strokeWidth="6" />
+        <path d={HANAMARU_SPIRAL_PATH} {...strokeProps} strokeWidth="5" />
+      </>)}
+      {subtype === 'double-circle' && (<>
+        <circle cx="60" cy="60" r="46" {...strokeProps} strokeWidth="6" />
+        <circle cx="60" cy="60" r="31" {...strokeProps} strokeWidth="5" />
+      </>)}
+      {subtype === 'circle' && <circle cx="60" cy="60" r="46" {...strokeProps} strokeWidth="6" />}
+      {subtype === 'triangle' && <path d={TRIANGLE_PATH} {...strokeProps} strokeWidth="6" />}
+      {subtype === 'check' && <path d={CHECK_PATH} {...strokeProps} strokeWidth="11" />}
+      {seal && (<>
+        {seal.border === 'flower' && <path d={SEAL_FLOWER_PATH} {...strokeProps} strokeWidth="4.5" />}
+        {seal.border === 'circle' && <circle cx="60" cy="60" r="50" {...strokeProps} strokeWidth="4.5" />}
+        {seal.border === 'double' && (<>
+          <circle cx="60" cy="60" r="50" {...strokeProps} strokeWidth="4.5" />
+          <circle cx="60" cy="60" r="42" {...strokeProps} strokeWidth="3" />
+        </>)}
+        {seal.border === 'square' && <rect x="21" y="21" width="78" height="78" rx="10" {...strokeProps} strokeWidth="4.5" />}
+        {seal.lines.map((line, i) => (
+          <text
+            key={i} x="60" y={60 + (i - (seal.lines.length - 1) / 2) * seal.fontSize * 1.12}
+            textAnchor="middle" dominantBaseline="central" fill={STAMP_RED}
+            fontSize={seal.fontSize} fontWeight="700" fontFamily="'Zen Maru Gothic', sans-serif"
+          >{line}</text>
+        ))}
+      </>)}
+    </svg>
+  );
+};
+
 const CUSTOM_JSON_PROPS = ['linkType', 'linkTarget', 'stampType'];
 
 // 背景画像(ページ画像そのもの)は毎回ページ表示時に再設定するため、
@@ -231,6 +367,9 @@ const CUSTOM_JSON_PROPS = ['linkType', 'linkTarget', 'stampType'];
 const serializeCanvas = (canvas) => {
   const json = canvas.toJSON(CUSTOM_JSON_PROPS);
   delete json.backgroundImage;
+  // 保存時のキャンバス幅を記録し、画面サイズの違う端末で開いても
+  // 書き込み位置を正しく再現できるようにする
+  json.canvasWidth = canvas.getWidth();
   return json;
 };
 
@@ -374,22 +513,23 @@ const useExternalScripts = () => {
 // ==========================================
 
 const Header = ({ onGoHome, title }) => (
-  <nav className="bg-white border-b-4 border-amber-500 px-6 py-2.5 flex justify-between items-center shadow-sm z-20 shrink-0">
-    <div className="flex items-center gap-3">
+  <nav className="bg-white border-b-4 border-amber-500 px-3 sm:px-6 py-1.5 sm:py-2.5 flex justify-between items-center shadow-sm z-20 shrink-0">
+    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
       {onGoHome ? (
-        <button onClick={onGoHome} className="flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-amber-600 bg-slate-100 hover:bg-amber-50 px-3 py-1.5 rounded-xl transition-all active:scale-95">
-          <ChevronLeft size={18} /> 一覧へ戻る
+        <button onClick={onGoHome} className="flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-amber-600 bg-slate-100 hover:bg-amber-50 px-2 sm:px-3 py-1.5 rounded-xl transition-all active:scale-95 shrink-0">
+          <ChevronLeft size={18} /> <span className="hidden sm:inline">一覧へ戻る</span>
         </button>
       ) : (
-        <div className="bg-amber-100 p-2 rounded-xl text-amber-600 shadow-inner"><Book size={24} /></div>
+        <div className="bg-amber-100 p-2 rounded-xl text-amber-600 shadow-inner shrink-0"><Book size={22} /></div>
       )}
-      <h1 className="text-xl font-bold text-slate-800 tracking-tight line-clamp-1">{title || APP_NAME}</h1>
+      <h1 className="text-base sm:text-xl font-bold text-slate-800 tracking-tight line-clamp-1">{title || APP_NAME}</h1>
     </div>
   </nav>
 );
 
-const Footer = () => (
-  <footer className="w-full bg-white border-t border-slate-200 pt-3 pb-2 text-center text-sm text-slate-500 font-bold shadow-sm shrink-0 z-20">
+// 編集画面では学習領域を最大化するため、スマホ等の小さな画面ではフッターを隠す
+const Footer = ({ compact = false }) => (
+  <footer className={`w-full bg-white border-t border-slate-200 py-1.5 text-center text-xs text-slate-500 font-bold shadow-sm shrink-0 z-20 ${compact ? 'hidden lg:block' : ''}`}>
     &copy; {new Date().getFullYear()} {APP_NAME} <a href={SNS_LINK} target="_blank" rel="noopener noreferrer" className="text-inherit hover:text-inherit no-underline cursor-default">{DEVELOPER_NAME}</a>
   </footer>
 );
@@ -475,9 +615,12 @@ export default function App() {
   const qrCanvasRef = useRef(null);
 
   // Editor States
-  const [mode, setMode] = useState('pencil'); 
+  // 開いた直後の誤書き込みを防ぐため、初期モードは「選択」にする
+  const [mode, setMode] = useState('select');
   const [color, setColor] = useState(COLORS[0]);
   const [zoom, setZoom] = useState(1);
+  const [canvasSize, setCanvasSize] = useState(null); // キャンバスの内部ピクセルサイズ
+  const [fitScale, setFitScale] = useState(1); // 画面サイズに合わせた表示倍率
   const [historyTrigger, setHistoryTrigger] = useState(0); // Undo/Redo UI更新用
   
   // UI States
@@ -509,9 +652,16 @@ export default function App() {
   const saveTimeoutRef = useRef(null);
   const modeRef = useRef(mode);
   const colorRef = useRef(color);
+  // fabric.js のイベントハンドラはキャンバス生成時に一度だけ登録されるため、
+  // ページ切替後も常に最新の値を参照できるよう ref 経由でアクセスする
+  const currentTextbookIdRef = useRef(currentTextbookId);
+  const currentPageRef = useRef(currentPage);
+  const scanQRCodeRef = useRef(null);
 
   useEffect(() => { modeRef.current = mode; }, [mode]);
   useEffect(() => { colorRef.current = color; }, [color]);
+  useEffect(() => { currentTextbookIdRef.current = currentTextbookId; }, [currentTextbookId]);
+  useEffect(() => { currentPageRef.current = currentPage; }, [currentPage]);
 
   // --- Utility Functions ---
   const toastTimeoutRef = useRef(null);
@@ -531,73 +681,97 @@ export default function App() {
 
   // 枠で囲んだ範囲、または画面全体をスキャンする
   const scanQRCode = useCallback(async (rect) => {
-    if (!fabricRef.current) return;
+    const fCanvas = fabricRef.current;
+    if (!fCanvas) return;
     showToast("QRコードを解析中...", "info");
 
-    // キャンバスの見た目を高解像度で画像化 (書き込み等も含めてスキャン可能に)
-    const dataURL = fabricRef.current.toDataURL({
-      format: 'png',
-      multiplier: 2 // 高解像度で出力して解析精度を上げる
+    // 1つの画像候補を BarcodeDetector → jsQR(白黒反転も試行) の順で解析する
+    const decodeCanvas = async (cv) => {
+      if (!cv || cv.width < 12 || cv.height < 12) return null;
+      if ('BarcodeDetector' in window) {
+        try {
+          const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+          const barcodes = await detector.detect(cv);
+          if (barcodes.length > 0 && barcodes[0].rawValue) return barcodes[0].rawValue;
+        } catch (e) { console.warn("BarcodeDetector error", e); }
+      }
+      if (window.jsQR) {
+        try {
+          const ctx = cv.getContext('2d');
+          const imageData = ctx.getImageData(0, 0, cv.width, cv.height);
+          const code = window.jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' });
+          if (code && code.data) return code.data;
+        } catch (e) { console.error("jsQR error", e); }
+      }
+      return null;
+    };
+
+    const loadImage = (src) => new Promise((resolve) => {
+      const im = new Image();
+      im.onload = () => resolve(im);
+      im.onerror = () => resolve(null);
+      im.src = src;
     });
 
-    const img = new Image();
-    img.src = dataURL;
-    
-    img.onload = async () => {
-      let decodedUrl = null;
-      const canvasW = fabricRef.current.width;
-      const canvasH = fabricRef.current.height;
-      const scaleX = img.width / canvasW;
-      const scaleY = img.height / canvasH;
+    const drawToCanvas = (source, sx, sy, sw, sh, scale = 1) => {
+      const cv = document.createElement('canvas');
+      cv.width = Math.max(1, Math.round(sw * scale));
+      cv.height = Math.max(1, Math.round(sh * scale));
+      const ctx = cv.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.drawImage(source, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
+      return cv;
+    };
 
-      // 画像ソースを解析するヘルパー関数
-      const scanImage = async (imageSource, width, height) => {
-         if ('BarcodeDetector' in window) {
-           try {
-             const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
-             const barcodes = await detector.detect(imageSource);
-             if (barcodes.length > 0) return barcodes[0].rawValue;
-           } catch (e) {
-             console.warn("BarcodeDetector error", e);
-           }
-         }
-         if (window.jsQR) {
-           try {
-             const canvas = document.createElement('canvas');
-             canvas.width = width;
-             canvas.height = height;
-             const ctx = canvas.getContext('2d');
-             ctx.drawImage(imageSource, 0, 0, width, height);
-             const imageData = ctx.getImageData(0, 0, width, height);
-             const code = window.jsQR(imageData.data, imageData.width, imageData.height);
-             if (code && code.data) return code.data;
-           } catch(e) {
-             console.error("jsQR error", e);
-           }
-         }
-         return null;
-      };
+    try {
+      const hasRect = rect && rect.width > 10 && rect.height > 10;
+      // 解析候補は必要になった時点で生成する(遅延評価でメモリ節約)
+      const candidateFns = [];
 
-      // 1. ユーザーがドラッグして枠を作成した場合、その部分だけを切り抜いて解析する
-      if (rect && rect.width > 10 && rect.height > 10) {
-        const padding = 60;
-        let sx = Math.max(0, (rect.left * scaleX) - padding);
-        let sy = Math.max(0, (rect.top * scaleY) - padding);
-        let sw = Math.min(img.width - sx, (rect.width * scaleX) + padding * 2);
-        let sh = Math.min(img.height - sy, (rect.height * scaleY) + padding * 2);
-
-        const cropCanvas = document.createElement('canvas');
-        cropCanvas.width = sw;
-        cropCanvas.height = sh;
-        const ctx = cropCanvas.getContext('2d');
-        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
-        
-        decodedUrl = await scanImage(cropCanvas, sw, sh);
+      // 1. 表示用に縮小される前の「元のページ画像」を最優先で解析する(最も高精細)
+      const pageImg = await loadImage(currentPages[currentPage]);
+      if (pageImg) {
+        const ratioX = pageImg.width / fCanvas.width;
+        const ratioY = pageImg.height / fCanvas.height;
+        if (hasRect) {
+          const pad = 40;
+          const sx = Math.max(0, rect.left * ratioX - pad);
+          const sy = Math.max(0, rect.top * ratioY - pad);
+          const sw = Math.min(pageImg.width - sx, rect.width * ratioX + pad * 2);
+          const sh = Math.min(pageImg.height - sy, rect.height * ratioY + pad * 2);
+          if (sw > 12 && sh > 12) {
+            candidateFns.push(() => drawToCanvas(pageImg, sx, sy, sw, sh, 1));
+            // 小さなQRコードは拡大版も試して認識率を上げる
+            candidateFns.push(() => drawToCanvas(pageImg, sx, sy, sw, sh, Math.max(sw, sh) < 500 ? 3 : 1.5));
+          }
+        }
+        candidateFns.push(() => drawToCanvas(pageImg, 0, 0, pageImg.width, pageImg.height, 1));
+        if (pageImg.width > 1600) {
+          candidateFns.push(() => drawToCanvas(pageImg, 0, 0, pageImg.width, pageImg.height, 1200 / pageImg.width));
+        }
       }
 
-      // 2. ドラッグしなかった(単なるクリック)、または枠内から見つからなかった場合は全体をスキャン
-      if (!decodedUrl) {
-         decodedUrl = await scanImage(img, img.width, img.height);
+      // 2. 書き込みやスタンプで貼られたQRも読めるよう、現在のキャンバス表示も解析する
+      const snapshot = await loadImage(fCanvas.toDataURL({ format: 'png', multiplier: 2 }));
+      if (snapshot) {
+        if (hasRect) {
+          const pad = 60;
+          const sx = Math.max(0, rect.left * 2 - pad);
+          const sy = Math.max(0, rect.top * 2 - pad);
+          const sw = Math.min(snapshot.width - sx, rect.width * 2 + pad * 2);
+          const sh = Math.min(snapshot.height - sy, rect.height * 2 + pad * 2);
+          if (sw > 12 && sh > 12) candidateFns.push(() => drawToCanvas(snapshot, sx, sy, sw, sh, 1));
+        }
+        candidateFns.push(() => drawToCanvas(snapshot, 0, 0, snapshot.width, snapshot.height, 1));
+      }
+
+      let decodedUrl = null;
+      for (const makeCandidate of candidateFns) {
+        decodedUrl = await decodeCanvas(makeCandidate());
+        if (decodedUrl) break;
       }
 
       if (decodedUrl) {
@@ -608,17 +782,23 @@ export default function App() {
           showToast(`QRコードの内容: ${decodedUrl}`, "info");
         }
       } else {
-        showToast("QRコードが見つかりません。鮮明なPDFを使用するか、正確に囲んでください。", "error");
+        showToast("QRコードが見つかりません。QRコードの周囲を少し広めに囲んでみてください。", "error");
       }
+    } finally {
       setMode('select');
-    };
-  }, [showToast]);
+    }
+  }, [showToast, currentPages, currentPage]);
+
+  useEffect(() => { scanQRCodeRef.current = scanQRCode; }, [scanQRCode]);
 
   // --- Initialization ---
   useEffect(() => {
-    const style = document.createElement('style');
-    style.innerHTML = `@import url('https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&display=swap'); body { font-family: 'Zen Maru Gothic', sans-serif; margin: 0; overflow: hidden; } .hide-scrollbar::-webkit-scrollbar { display: none; } .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }`;
-    document.head.appendChild(style);
+    // スタンプ・テキストの描画で使うWebフォントを先読みしておく
+    // (未ロードのままだと fabric.js の文字幅計算がずれるため)
+    if (document.fonts && document.fonts.load) {
+      document.fonts.load("700 40px 'Zen Maru Gothic'");
+      document.fonts.load("400 40px 'Zen Maru Gothic'");
+    }
 
     const savedMyStamps = localStorage.getItem(DB_KEY_MYSTAMPS);
     if (savedMyStamps) { try { setMyStamps(JSON.parse(savedMyStamps)); } catch(e){} }
@@ -1027,15 +1207,44 @@ export default function App() {
     setHistoryTrigger(prev => prev + 1);
   }, []);
 
+  // 保存待ちのページ情報。ページ切り替え時に「切り替え後の内容が前のページに
+  // 保存されてしまう」事故を防ぐため、予約時点の対象を記録しておく
+  const pendingSaveRef = useRef(null);
+
+  // 保存待ちがあれば「今すぐ」保存する(ページ切替・アプリ離脱時に呼ぶ)
+  const commitPendingSave = useCallback(() => {
+    if (saveTimeoutRef.current) { clearTimeout(saveTimeoutRef.current); saveTimeoutRef.current = null; }
+    const target = pendingSaveRef.current;
+    pendingSaveRef.current = null;
+    if (!target || !fabricRef.current || !window.idbKeyval) return;
+    if (!drawingsRef.current[target.tbId]) drawingsRef.current[target.tbId] = {};
+    drawingsRef.current[target.tbId][target.page] = serializeCanvas(fabricRef.current);
+    try { window.idbKeyval.set(DB_KEY_DRAWINGS, drawingsRef.current); } catch (e) { }
+  }, []);
+
+  // ref 経由で現在のページを参照することで関数の同一性を保ち、
+  // キャンバス生成時に登録されたイベントハンドラからも常に正しいページへ保存される
   const triggerAutoSave = useCallback(() => {
+    const tbId = currentTextbookIdRef.current;
+    if (!tbId) return;
+    pendingSaveRef.current = { tbId, page: currentPageRef.current };
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    saveTimeoutRef.current = setTimeout(async () => {
-      if (!fabricRef.current || !currentTextbookId) return;
-      if (!drawingsRef.current[currentTextbookId]) drawingsRef.current[currentTextbookId] = {};
-      drawingsRef.current[currentTextbookId][currentPage] = serializeCanvas(fabricRef.current);
-      try { await window.idbKeyval.set(DB_KEY_DRAWINGS, drawingsRef.current); } catch (e) { }
+    saveTimeoutRef.current = setTimeout(() => {
+      saveTimeoutRef.current = null;
+      commitPendingSave();
     }, 800); // 800ms debounce
-  }, [currentTextbookId, currentPage]);
+  }, [commitPendingSave]);
+
+  // タブを閉じる・アプリを切り替えるときに保存待ちを確実に書き込む
+  useEffect(() => {
+    const flush = () => commitPendingSave();
+    document.addEventListener('visibilitychange', flush);
+    window.addEventListener('pagehide', flush);
+    return () => {
+      document.removeEventListener('visibilitychange', flush);
+      window.removeEventListener('pagehide', flush);
+    };
+  }, [commitPendingSave]);
 
   // 履歴データには背景画像が含まれないため、復元後に元の背景を再設定する
   const restoreCanvasState = useCallback((state) => {
@@ -1069,11 +1278,16 @@ export default function App() {
 
   // --- Fabric.js Setup ---
   useEffect(() => {
+    // ページ・教科書の切り替え前に、書きかけの保存を必ず確定させる
+    // (この時点のキャンバスにはまだ「前のページ」の内容が残っている)
+    commitPendingSave();
+
     if (!currentTextbookId) {
       if (fabricRef.current) {
         fabricRef.current.dispose();
         fabricRef.current = null;
       }
+      setCanvasSize(null);
       return;
     }
 
@@ -1175,9 +1389,9 @@ export default function App() {
              activeShape = null; 
              startPoint = null;
              
-             // 枠が消えた後にスキャン処理を開始
+             // 枠が消えた後にスキャン処理を開始 (常に最新ページを参照するため ref 経由で呼ぶ)
              setTimeout(() => {
-                scanQRCode(rectData);
+                if (scanQRCodeRef.current) scanQRCodeRef.current(rectData);
              }, 10); // 描画の反映を待つためにわずかに遅延させる
              return;
            } else if (cMode === 'arrow') {
@@ -1206,13 +1420,14 @@ export default function App() {
       if (isCancelled) return;
       const containerWidth = containerRef.current?.clientWidth || window.innerWidth;
       const containerHeight = containerRef.current?.clientHeight || window.innerHeight;
-      const scale = Math.min(containerWidth / img.width, containerHeight / img.height); 
+      const scale = Math.min(containerWidth / img.width, containerHeight / img.height);
       const renderWidth = img.width * scale;
       const renderHeight = img.height * scale;
 
       canvas.setWidth(renderWidth); canvas.setHeight(renderHeight);
+      setCanvasSize({ w: renderWidth, h: renderHeight });
       img.scaleToWidth(renderWidth); img.scaleToHeight(renderHeight);
-      
+
       // Ensure background is not selectable
       img.selectable = false;
       img.evented = false;
@@ -1226,9 +1441,25 @@ export default function App() {
         isHistoryProcessing.current = false;
       };
 
-      if (drawingsRef.current[currentTextbookId]?.[currentPage]) {
-        canvas.loadFromJSON(drawingsRef.current[currentTextbookId][currentPage], () => {
+      const savedDrawing = drawingsRef.current[currentTextbookId]?.[currentPage];
+      if (savedDrawing) {
+        canvas.loadFromJSON(savedDrawing, () => {
           if (isCancelled) return;
+          // 別の画面サイズの端末で保存されたデータは、現在のキャンバス幅に
+          // 合わせて位置・大きさをスケーリングし直す
+          const savedWidth = savedDrawing.canvasWidth;
+          if (savedWidth > 0 && Math.abs(savedWidth - renderWidth) > 1) {
+            const ratio = renderWidth / savedWidth;
+            canvas.getObjects().forEach(obj => {
+              obj.set({
+                left: obj.left * ratio,
+                top: obj.top * ratio,
+                scaleX: obj.scaleX * ratio,
+                scaleY: obj.scaleY * ratio,
+              });
+              obj.setCoords();
+            });
+          }
           // 保存データに背景画像は含まれないため、読み込み後に再設定する
           canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas));
           canvas.renderAll();
@@ -1244,13 +1475,33 @@ export default function App() {
     return () => {
       isCancelled = true;
     };
-  }, [scriptsLoaded, isDataLoaded, currentTextbookId, currentPages, currentPage, saveHistory, triggerAutoSave, scanQRCode]);
+  }, [scriptsLoaded, isDataLoaded, currentTextbookId, currentPages, currentPage, saveHistory, triggerAutoSave, commitPendingSave]);
 
   // --- Tool Modes ---
   useEffect(() => {
     if (!fabricRef.current) return;
     applyCanvasMode(fabricRef.current, mode, color);
   }, [mode, color]);
+
+  // --- 画面サイズへの自動フィット ---
+  // 端末の回転やウィンドウリサイズ時に、ページ全体が常に収まる表示倍率を計算する
+  useEffect(() => {
+    if (!currentTextbookId || !canvasSize) return;
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () => {
+      const pad = 24;
+      const s = Math.min(
+        (el.clientWidth - pad) / canvasSize.w,
+        (el.clientHeight - pad) / canvasSize.h
+      );
+      setFitScale(Math.min(2, Math.max(0.1, s)));
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [currentTextbookId, canvasSize]);
 
   // --- Add Objects ---
   const addObjectToCenter = useCallback((obj, autoEdit = false) => {
@@ -1285,8 +1536,10 @@ export default function App() {
 
   const addPresetStampToCanvas = useCallback((stamp) => {
     let obj = null;
-    if (stamp.type === 'math' && stamp.subtype) {
-       obj = createMathShape(stamp.subtype, 0, 0); 
+    if (stamp.type === 'premium' && stamp.subtype) {
+       obj = createPremiumStamp(stamp.subtype);
+    } else if (stamp.type === 'math' && stamp.subtype) {
+       obj = createMathShape(stamp.subtype, 0, 0);
     } else {
        const content = stamp.type === 'vertical' ? stamp.text : stamp.icon;
        obj = new window.fabric.Text(content, {
@@ -1451,7 +1704,7 @@ export default function App() {
   // ==========================================
   if (scriptError) {
     return (
-      <div className="h-screen w-full flex items-center justify-center bg-amber-50/40">
+      <div className="h-dvh w-full flex items-center justify-center bg-amber-50/40">
         <div className="bg-white p-8 rounded-2xl shadow-xl max-w-lg text-center border-2 border-red-200">
           <AlertCircle size={48} className="text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-slate-800 mb-2">ライブラリの読み込みに失敗しました</h2>
@@ -1471,11 +1724,11 @@ export default function App() {
   }
 
   if (!scriptsLoaded || !isDataLoaded) {
-    return <div className="h-screen w-full flex items-center justify-center bg-amber-50/40"><div className="flex flex-col items-center gap-4 text-amber-600"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-amber-500"></div><div className="text-xl font-bold animate-pulse">システムを準備中...</div></div></div>;
+    return <div className="h-dvh w-full flex items-center justify-center bg-amber-50/40"><div className="flex flex-col items-center gap-4 text-amber-600"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-amber-500"></div><div className="text-xl font-bold animate-pulse">システムを準備中...</div></div></div>;
   }
 
   return (
-    <div className="h-screen w-full flex flex-col bg-slate-100 overflow-hidden relative">
+    <div className="h-dvh w-full flex flex-col bg-slate-100 overflow-hidden relative">
       <Header onGoHome={currentTextbookId ? () => setCurrentTextbookId(null) : null} title={currentTextbook?.title} />
       
       {/* --- ホーム画面 --- */}
@@ -1545,7 +1798,7 @@ export default function App() {
         <>
           {/* ツールバー (折り返し対応) */}
           <div className="bg-white border-b border-slate-200 shadow-sm z-10 relative">
-            <div className="flex flex-wrap px-4 py-2.5 gap-y-3 gap-x-4 items-center mx-auto justify-center">
+            <div className="flex flex-wrap px-1.5 sm:px-4 py-1.5 sm:py-2 gap-y-1.5 gap-x-1.5 sm:gap-x-3 items-center mx-auto justify-center">
               
               {/* Undo / Redo */}
               <div className="flex bg-slate-100 rounded-xl p-1 shadow-inner">
@@ -1553,7 +1806,7 @@ export default function App() {
                 <button onClick={handleRedo} disabled={redoStackRef.current.length === 0} className="p-2 rounded-lg text-slate-600 disabled:opacity-30 hover:bg-white hover:shadow-sm transition-all active:scale-95"><Redo2 size={20} /></button>
               </div>
 
-              <div className="w-px h-8 bg-slate-300 rounded-full hidden sm:block"></div>
+              <div className="w-px h-8 bg-slate-300 rounded-full hidden lg:block"></div>
 
               {/* 描画・選択ツール */}
               <div className="flex bg-slate-100 rounded-xl p-1 gap-1 shadow-inner">
@@ -1571,13 +1824,13 @@ export default function App() {
                 ))}
               </div>
 
-              <div className="w-px h-8 bg-slate-300 rounded-full hidden sm:block"></div>
+              <div className="w-px h-8 bg-slate-300 rounded-full hidden lg:block"></div>
 
               {/* 挿入ツール群 */}
               <div className="flex gap-2 relative">
                 <div className="relative">
-                  <button onClick={() => { closeAllMenus(); setShowShapeMenu(!showShapeMenu); }} className={`flex items-center gap-1.5 border-2 font-bold px-3 py-2 rounded-xl transition-all active:scale-95 text-sm ${['rect','circle','line','arrow'].includes(mode) || showShapeMenu ? 'bg-amber-100 border-amber-400 text-amber-700 shadow-inner' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm'}`}>
-                    <Square size={16} /> 図形
+                  <button onClick={() => { closeAllMenus(); setShowShapeMenu(!showShapeMenu); }} title="図形" className={`flex items-center gap-1.5 border-2 font-bold px-2.5 sm:px-3 py-2 rounded-xl transition-all active:scale-95 text-sm ${['rect','circle','line','arrow'].includes(mode) || showShapeMenu ? 'bg-amber-100 border-amber-400 text-amber-700 shadow-inner' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm'}`}>
+                    <Square size={16} /> <span className="hidden md:inline">図形</span>
                   </button>
                   {showShapeMenu && (
                     <div className="absolute top-full mt-2 left-0 bg-white border border-slate-200 p-2 rounded-xl shadow-xl z-50 flex gap-2 animate-in fade-in slide-in-from-top-2">
@@ -1590,13 +1843,13 @@ export default function App() {
                   )}
                 </div>
 
-                <button onClick={() => { closeAllMenus(); addTextOrStamp("テキスト", false); }} className="flex items-center gap-1.5 bg-white border-2 border-slate-200 hover:bg-slate-50 hover:border-amber-300 text-slate-600 font-bold px-3 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm">
-                  <Type size={16} /> もじ
+                <button onClick={() => { closeAllMenus(); addTextOrStamp("テキスト", false); }} title="もじ" className="flex items-center gap-1.5 bg-white border-2 border-slate-200 hover:bg-slate-50 hover:border-amber-300 text-slate-600 font-bold px-2.5 sm:px-3 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm">
+                  <Type size={16} /> <span className="hidden md:inline">もじ</span>
                 </button>
                 
                 <div className="relative">
-                  <button onClick={() => { closeAllMenus(); setShowStickyMenu(!showStickyMenu); }} className={`flex items-center gap-1.5 border-2 font-bold px-3 py-2 rounded-xl transition-all active:scale-95 text-sm ${showStickyMenu ? 'bg-amber-100 border-amber-400 text-amber-700 shadow-inner' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm'}`}>
-                    <StickyNote size={16} /> ふせん
+                  <button onClick={() => { closeAllMenus(); setShowStickyMenu(!showStickyMenu); }} title="ふせん" className={`flex items-center gap-1.5 border-2 font-bold px-2.5 sm:px-3 py-2 rounded-xl transition-all active:scale-95 text-sm ${showStickyMenu ? 'bg-amber-100 border-amber-400 text-amber-700 shadow-inner' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm'}`}>
+                    <StickyNote size={16} /> <span className="hidden md:inline">ふせん</span>
                   </button>
                   {showStickyMenu && (
                     <div className="absolute top-full mt-2 left-0 bg-white border border-slate-200 p-3 rounded-xl shadow-xl z-50 flex gap-3 animate-in fade-in slide-in-from-top-2">
@@ -1606,8 +1859,8 @@ export default function App() {
                 </div>
 
                 <div className="relative">
-                   <button onClick={() => { closeAllMenus(); setShowLinkMenu(!showLinkMenu); }} className={`flex items-center gap-1.5 border-2 font-bold px-3 py-2 rounded-xl transition-all active:scale-95 text-sm ${showLinkMenu ? 'bg-amber-100 border-amber-400 text-amber-700 shadow-inner' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm'}`}>
-                    <LinkIcon size={16} /> リンク
+                   <button onClick={() => { closeAllMenus(); setShowLinkMenu(!showLinkMenu); }} title="リンク" className={`flex items-center gap-1.5 border-2 font-bold px-2.5 sm:px-3 py-2 rounded-xl transition-all active:scale-95 text-sm ${showLinkMenu ? 'bg-amber-100 border-amber-400 text-amber-700 shadow-inner' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm'}`}>
+                    <LinkIcon size={16} /> <span className="hidden md:inline">リンク</span>
                   </button>
                   {showLinkMenu && (
                     <div className="absolute top-full mt-2 left-0 bg-white border border-slate-200 p-2 rounded-xl shadow-xl z-50 flex flex-col gap-1 w-36 animate-in fade-in slide-in-from-top-2">
@@ -1618,11 +1871,11 @@ export default function App() {
                 </div>
 
                 <div className="relative">
-                  <button onClick={() => { closeAllMenus(); setShowStampMenu(!showStampMenu); }} className={`flex items-center gap-1.5 border-2 font-bold px-3 py-2 rounded-xl transition-all active:scale-95 text-sm ${showStampMenu ? 'bg-amber-100 border-amber-400 text-amber-700 shadow-inner' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm'}`}>
-                    <Smile size={16} /> スタンプ
+                  <button onClick={() => { closeAllMenus(); setShowStampMenu(!showStampMenu); }} title="スタンプ" className={`flex items-center gap-1.5 border-2 font-bold px-2.5 sm:px-3 py-2 rounded-xl transition-all active:scale-95 text-sm ${showStampMenu ? 'bg-amber-100 border-amber-400 text-amber-700 shadow-inner' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm'}`}>
+                    <Smile size={16} /> <span className="hidden md:inline">スタンプ</span>
                   </button>
                   {showStampMenu && (
-                    <div className="absolute top-full mt-2 left-auto right-0 xl:left-0 xl:right-auto bg-white border border-slate-200 p-4 rounded-2xl shadow-2xl z-50 w-80 animate-in fade-in slide-in-from-top-2">
+                    <div className="fixed sm:absolute top-auto sm:top-full left-1/2 sm:left-auto -translate-x-1/2 sm:translate-x-0 bottom-4 sm:bottom-auto sm:mt-2 sm:right-0 xl:left-0 xl:right-auto bg-white border border-slate-200 p-4 rounded-2xl shadow-2xl z-50 w-[min(20rem,calc(100vw-1.5rem))] animate-in fade-in slide-in-from-top-2">
                       <div className="flex bg-slate-100 p-1 rounded-xl mb-3 shadow-inner overflow-x-auto hide-scrollbar">
                         {STAMP_CATEGORIES.map(cat => (
                           <button key={cat.id} onClick={() => setStampTab(cat.id)} className={`flex-shrink-0 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${stampTab === cat.id ? 'bg-white shadow-sm text-amber-600' : 'text-slate-500 hover:text-slate-700'}`}>
@@ -1633,9 +1886,13 @@ export default function App() {
                       <div className="grid grid-cols-4 gap-2 max-h-56 overflow-y-auto p-1 hide-scrollbar">
                         {stampTab !== 'my' && STAMPS_DATA[stampTab].map((stamp, idx) => (
                           <button key={idx} onClick={() => addPresetStampToCanvas(stamp)} className="flex flex-col items-center justify-center py-2 px-1 rounded-xl hover:bg-amber-50 border border-transparent hover:border-amber-200 transition-all active:scale-95 group">
-                            <span className="text-2xl leading-none mb-1 group-hover:scale-110 transition-transform" style={{color: stamp.color}}>
-                              {stamp.type === 'vertical' ? stamp.text.replace(/\n/g, '') : stamp.icon}
-                            </span>
+                            {stamp.type === 'premium' ? (
+                              <span className="leading-none mb-1 group-hover:scale-110 transition-transform"><StampPreview subtype={stamp.subtype} /></span>
+                            ) : (
+                              <span className="text-2xl leading-none mb-1 group-hover:scale-110 transition-transform" style={{color: stamp.color}}>
+                                {stamp.type === 'vertical' ? stamp.text.replace(/\n/g, '') : stamp.icon}
+                              </span>
+                            )}
                             <span className="text-[9px] font-bold text-slate-500 truncate w-full text-center">{stamp.label}</span>
                           </button>
                         ))}
@@ -1660,21 +1917,21 @@ export default function App() {
                 </div>
               </div>
               
-              <div className="w-px h-8 bg-slate-300 rounded-full"></div>
+              <div className="w-px h-8 bg-slate-300 rounded-full hidden lg:block"></div>
 
               {/* タイマー表示ボタン */}
-              <button onClick={() => setShowTimer(!showTimer)} className={`flex items-center gap-1.5 font-bold px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm ${showTimer ? 'bg-blue-600 text-white shadow-inner' : 'bg-white border border-blue-200 text-blue-600 hover:bg-blue-50'}`}>
-                <Timer size={16} /> タイマー
+              <button onClick={() => setShowTimer(!showTimer)} title="タイマー" className={`flex items-center gap-1.5 font-bold px-2.5 sm:px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm ${showTimer ? 'bg-blue-600 text-white shadow-inner' : 'bg-white border border-blue-200 text-blue-600 hover:bg-blue-50'}`}>
+                <Timer size={16} /> <span className="hidden md:inline">タイマー</span>
               </button>
 
-              <div className="w-px h-8 bg-slate-300 rounded-full hidden sm:block"></div>
+              <div className="w-px h-8 bg-slate-300 rounded-full hidden lg:block"></div>
 
               {/* 共有ボタン */}
-              <button onClick={startHosting} className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-bold px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-md shadow-emerald-500/30">
-                <Share2 size={16} /> 共有する
+              <button onClick={startHosting} title="共有する" className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-bold px-2.5 sm:px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-md shadow-emerald-500/30">
+                <Share2 size={16} /> <span className="hidden md:inline">共有する</span>
               </button>
 
-              <div className="w-px h-8 bg-slate-300 rounded-full hidden sm:block"></div>
+              <div className="w-px h-8 bg-slate-300 rounded-full hidden lg:block"></div>
 
               {/* ショートカットヘルプ */}
               <button onClick={() => setShowShortcuts(true)} className="flex items-center justify-center p-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-slate-700 rounded-xl transition-all active:scale-95 shadow-sm" title="ショートカットキー (?)">
@@ -1684,15 +1941,26 @@ export default function App() {
           </div>
 
           {/* キャンバスエリア */}
-          <main ref={containerRef} className="flex-grow overflow-auto relative bg-slate-200/80 flex items-center justify-center" onClick={closeAllMenus}>
-            <div className="bg-white shadow-xl transition-transform duration-200 origin-center rounded-sm" style={{ transform: `scale(${zoom})` }}>
-              <canvas ref={canvasRef} />
+          <main ref={containerRef} className="flex-grow relative overflow-hidden bg-slate-200/80">
+            {/*
+              拡大時もページ全体をスクロールして見られるように、
+              スクロール領域内のラッパーへ「拡大後の実サイズ」を明示的に与える
+              (transform だけではレイアウト上のサイズが変わらず、端が見切れてしまうため)
+            */}
+            <div className="absolute inset-0 overflow-auto flex" onClick={closeAllMenus}>
+              <div className="m-auto p-3">
+                <div style={canvasSize ? { width: canvasSize.w * fitScale * zoom, height: canvasSize.h * fitScale * zoom } : undefined}>
+                  <div className="bg-white shadow-xl rounded-sm" style={{ transform: `scale(${fitScale * zoom})`, transformOrigin: 'top left' }}>
+                    <canvas ref={canvasRef} />
+                  </div>
+                </div>
+              </div>
             </div>
-            
+
             {showTimer && <TimerPanel onClose={() => setShowTimer(false)} />}
             
             {/* ページナビゲーション (Floating) */}
-            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-slate-800/80 backdrop-blur-md text-white rounded-full px-4 py-2 shadow-lg z-20 animate-in slide-in-from-bottom-5">
+            <div className="absolute bottom-3 sm:bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-slate-800/80 backdrop-blur-md text-white rounded-full px-3 sm:px-4 py-1.5 sm:py-2 shadow-lg z-20 animate-in slide-in-from-bottom-5">
               <button onClick={() => changePage(-1)} disabled={currentPage === 0} className="p-1 hover:text-amber-400 disabled:opacity-30 transition-colors"><ChevronLeft size={24} /></button>
               
               <div className="relative flex items-center justify-center">
@@ -1736,14 +2004,14 @@ export default function App() {
             </div>
 
             {/* ズーム＆クリア (Floating Right) */}
-            <div className="absolute bottom-6 right-6 flex flex-col gap-3 z-20">
+            <div className="absolute bottom-3 right-3 sm:bottom-6 sm:right-6 flex flex-col gap-2 sm:gap-3 z-20">
               <div className="flex flex-col bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
-                <button onClick={() => setZoom(Math.min(3, zoom + 0.2))} className="p-3 text-slate-600 hover:bg-slate-50 hover:text-amber-600 transition-colors border-b border-slate-100"><ZoomIn size={20} /></button>
+                <button onClick={() => setZoom(Math.min(3, zoom + 0.2))} className="p-2.5 sm:p-3 text-slate-600 hover:bg-slate-50 hover:text-amber-600 transition-colors border-b border-slate-100"><ZoomIn size={20} /></button>
                 <div className="py-1 text-center font-bold text-xs text-slate-400 bg-slate-50">{Math.round(zoom * 100)}%</div>
-                <button onClick={() => setZoom(Math.max(0.5, zoom - 0.2))} className="p-3 text-slate-600 hover:bg-slate-50 hover:text-amber-600 transition-colors border-t border-slate-100"><ZoomOut size={20} /></button>
+                <button onClick={() => setZoom(Math.max(0.5, zoom - 0.2))} className="p-2.5 sm:p-3 text-slate-600 hover:bg-slate-50 hover:text-amber-600 transition-colors border-t border-slate-100"><ZoomOut size={20} /></button>
               </div>
-              <button onClick={clearCurrentPage} className="p-4 bg-white border border-red-200 text-red-500 hover:bg-red-50 rounded-xl shadow-lg transition-all active:scale-95 group">
-                <Trash2 size={24} className="group-hover:scale-110 transition-transform" />
+              <button onClick={clearCurrentPage} className="p-3 sm:p-4 bg-white border border-red-200 text-red-500 hover:bg-red-50 rounded-xl shadow-lg transition-all active:scale-95 group">
+                <Trash2 size={22} className="group-hover:scale-110 transition-transform" />
               </button>
             </div>
           </main>
@@ -2010,7 +2278,7 @@ export default function App() {
         </div>
       )}
 
-      <Footer />
+      <Footer compact={!!currentTextbookId} />
     </div>
   );
 }

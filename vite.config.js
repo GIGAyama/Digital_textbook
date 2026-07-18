@@ -9,6 +9,7 @@ export default defineConfig({
             registerType: 'autoUpdate',
             includeAssets: ['favicon.png', 'apple-touch-icon.png'],
             manifest: {
+                id: '/Digital_textbook/',
                 name: 'デジタル教科書メーカー',
                 short_name: 'デジタル教科書',
                 description: 'PDFを読み込んで書き込みができる、先生と子どものためのデジタル教科書アプリ',
