@@ -6,7 +6,8 @@ import {
   StickyNote, Timer, Play, Pause, RotateCcw,
   Link as LinkIcon, Volume2, Settings, X,
   Undo2, Redo2, AlertCircle, CheckCircle2, Info, QrCode,
-  Share2, Copy, Loader2, Download, Upload, Cloud
+  Share2, Copy, Loader2, Download, Upload, Cloud,
+  Maximize, Minimize, Columns, Check
 } from 'lucide-react';
 
 // ==========================================
@@ -21,6 +22,7 @@ const DB_KEY_TEXTBOOKS = "digital_textbooks_v3";
 const DB_KEY_DRAWINGS = "digital_textbook_drawings_v3";
 const DB_KEY_MYSTAMPS = "digital_textbook_mystamps";
 const DB_KEY_LAST_OPENED = "digital_textbook_last_opened";
+const DB_KEY_VIEW_MODE = "digital_textbook_view_mode";
 
 const BACKUP_FORMAT = "digital-textbook-backup";
 const BACKUP_VERSION = 1;
@@ -621,6 +623,12 @@ export default function App() {
   const [zoom, setZoom] = useState(1);
   const [canvasSize, setCanvasSize] = useState(null); // キャンバスの内部ピクセルサイズ
   const [fitScale, setFitScale] = useState(1); // 画面サイズに合わせた表示倍率
+
+  // 表示モード: 'full' = ページ全体 / 'half' = 縦画面向けにページを中央で分割して半分ずつ表示
+  const [viewMode, setViewMode] = useState('full');
+  const [halfOrder, setHalfOrder] = useState('ltr'); // 'ltr' = 左から先 / 'rtl' = 右から先 (国語など右開きの教科書用)
+  const [halfSide, setHalfSide] = useState('left'); // 現在表示している側
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [historyTrigger, setHistoryTrigger] = useState(0); // Undo/Redo UI更新用
   
   // UI States
@@ -634,6 +642,7 @@ export default function App() {
   const [showLinkMenu, setShowLinkMenu] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showPageJump, setShowPageJump] = useState(false);
+  const [showViewMenu, setShowViewMenu] = useState(false);
   
   // Custom Dialog & Toast
   const [dialog, setDialog] = useState(null);
@@ -675,8 +684,8 @@ export default function App() {
     setDialog({ title, message, onConfirm, confirmText, isDestructive });
   }, []);
 
-  const closeAllMenus = useCallback(() => { 
-    setShowStampMenu(false); setShowShapeMenu(false); setShowStickyMenu(false); setShowLinkMenu(false); setShowPageJump(false);
+  const closeAllMenus = useCallback(() => {
+    setShowStampMenu(false); setShowShapeMenu(false); setShowStickyMenu(false); setShowLinkMenu(false); setShowPageJump(false); setShowViewMenu(false);
   }, []);
 
   // 枠で囲んだ範囲、または画面全体をスキャンする
@@ -802,6 +811,54 @@ export default function App() {
 
     const savedMyStamps = localStorage.getItem(DB_KEY_MYSTAMPS);
     if (savedMyStamps) { try { setMyStamps(JSON.parse(savedMyStamps)); } catch(e){} }
+
+    // 表示モード(全体/半ページ・左右どちらが先か)の復元
+    const savedView = localStorage.getItem(DB_KEY_VIEW_MODE);
+    if (savedView) {
+      try {
+        const v = JSON.parse(savedView);
+        const order = v.order === 'rtl' ? 'rtl' : 'ltr';
+        setHalfOrder(order);
+        setHalfSide(order === 'rtl' ? 'right' : 'left');
+        if (v.mode === 'half') setViewMode('half');
+      } catch(e){}
+    }
+  }, []);
+
+  // 表示モードの保存
+  useEffect(() => {
+    localStorage.setItem(DB_KEY_VIEW_MODE, JSON.stringify({ mode: viewMode, order: halfOrder }));
+  }, [viewMode, halfOrder]);
+
+  // --- 全画面表示 ---
+  const toggleFullscreen = useCallback(() => {
+    if (!isFullscreen) {
+      // ブラウザのフルスクリーンAPIはベストエフォート
+      // (iPhoneのSafari等では未対応のため、その場合もUIを隠す「集中モード」として動作する)
+      setIsFullscreen(true);
+      const el = document.documentElement;
+      const req = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (req) { try { const p = req.call(el); if (p && p.catch) p.catch(() => {}); } catch (e) {} }
+    } else {
+      setIsFullscreen(false);
+      if (document.fullscreenElement || document.webkitFullscreenElement) {
+        const exit = document.exitFullscreen || document.webkitExitFullscreen;
+        if (exit) { try { const p = exit.call(document); if (p && p.catch) p.catch(() => {}); } catch (e) {} }
+      }
+    }
+  }, [isFullscreen]);
+
+  // Escキー等でブラウザ側のフルスクリーンが解除されたときに状態を同期する
+  useEffect(() => {
+    const onChange = () => {
+      if (!(document.fullscreenElement || document.webkitFullscreenElement)) setIsFullscreen(false);
+    };
+    document.addEventListener('fullscreenchange', onChange);
+    document.addEventListener('webkitfullscreenchange', onChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange);
+      document.removeEventListener('webkitfullscreenchange', onChange);
+    };
   }, []);
 
   useEffect(() => {
@@ -1491,8 +1548,10 @@ export default function App() {
     if (!el) return;
     const update = () => {
       const pad = 24;
+      // 半ページ表示では「ページの半分の幅」が画面に収まるように倍率を計算する
+      const effectiveW = viewMode === 'half' ? canvasSize.w / 2 : canvasSize.w;
       const s = Math.min(
-        (el.clientWidth - pad) / canvasSize.w,
+        (el.clientWidth - pad) / effectiveW,
         (el.clientHeight - pad) / canvasSize.h
       );
       setFitScale(Math.min(2, Math.max(0.1, s)));
@@ -1501,17 +1560,19 @@ export default function App() {
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [currentTextbookId, canvasSize]);
+  }, [currentTextbookId, canvasSize, viewMode]);
 
   // --- Add Objects ---
   const addObjectToCenter = useCallback((obj, autoEdit = false) => {
     if (!fabricRef.current) return;
     const canvas = fabricRef.current;
-    
+
     const vpt = canvas.viewportTransform;
     const zoom = canvas.getZoom();
-    const centerX = (-vpt[4] + canvas.getWidth() / 2) / zoom;
+    let centerX = (-vpt[4] + canvas.getWidth() / 2) / zoom;
     const centerY = (-vpt[5] + canvas.getHeight() / 2) / zoom;
+    // 半ページ表示中は、見えている側の中央に配置する
+    if (viewMode === 'half') centerX = canvas.getWidth() * (halfSide === 'left' ? 0.25 : 0.75);
 
     obj.set({ left: centerX, top: centerY });
     canvas.add(obj); 
@@ -1523,7 +1584,7 @@ export default function App() {
     }
     setMode('select'); closeAllMenus();
     saveHistory(); triggerAutoSave();
-  }, [closeAllMenus, saveHistory, triggerAutoSave]);
+  }, [closeAllMenus, saveHistory, triggerAutoSave, viewMode, halfSide]);
 
   const addTextOrStamp = (textValue, isStamp = false) => {
     const obj = new window.fabric.IText(textValue, {
@@ -1604,13 +1665,51 @@ export default function App() {
     showToast(isUrl ? "リンクを配置しました。ダブルクリックで開きます。" : "音声を配置しました。ダブルクリックで再生します。");
   };
 
+  // 半ページ表示のとき、設定した読み順で最初に表示する側と後に表示する側
+  const halfFirstSide = halfOrder === 'rtl' ? 'right' : 'left';
+  const halfSecondSide = halfOrder === 'rtl' ? 'left' : 'right';
+
   const changePage = useCallback((delta) => {
+    // 半ページ表示では「前半分 → 後半分 → 次ページの前半分」の順に進む
+    if (viewMode === 'half' && delta !== 0) {
+      if (delta > 0) {
+        if (halfSide === halfFirstSide) { setHalfSide(halfSecondSide); return; }
+        if (currentPage < currentPages.length - 1) {
+          setCurrentPage(currentPage + 1);
+          setHalfSide(halfFirstSide);
+          setZoom(1);
+        }
+      } else {
+        if (halfSide === halfSecondSide) { setHalfSide(halfFirstSide); return; }
+        if (currentPage > 0) {
+          setCurrentPage(currentPage - 1);
+          setHalfSide(halfSecondSide);
+          setZoom(1);
+        }
+      }
+      return;
+    }
     const newPage = currentPage + delta;
     if (newPage >= 0 && newPage < currentPages.length) {
       setCurrentPage(newPage);
       setZoom(1);
     }
-  }, [currentPage, currentPages.length]);
+  }, [currentPage, currentPages.length, viewMode, halfSide, halfFirstSide, halfSecondSide]);
+
+  const canGoPrev = viewMode === 'half' ? (currentPage > 0 || halfSide !== halfFirstSide) : currentPage > 0;
+  const canGoNext = viewMode === 'half'
+    ? (currentPage < currentPages.length - 1 || halfSide !== halfSecondSide)
+    : currentPage < currentPages.length - 1;
+
+  const selectViewMode = (mode, order) => {
+    setViewMode(mode);
+    if (mode === 'half') {
+      const ord = order || halfOrder;
+      setHalfOrder(ord);
+      setHalfSide(ord === 'rtl' ? 'right' : 'left');
+    }
+    setShowViewMenu(false);
+  };
 
   const clearCurrentPage = () => {
     showConfirm("ページの消去", "このページの書き込みをすべて消去しますか？", async () => {
@@ -1691,13 +1790,14 @@ export default function App() {
         case 'e': case 'E': setMode('eraser'); break;
         case 'h': case 'H': setMode('highlighter'); break;
         case 'q': case 'Q': setMode('qr'); break;
+        case 'f': case 'F': toggleFullscreen(); break;
         default: break;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentTextbookId, changePage, handleUndo, handleRedo, saveHistory, triggerAutoSave]);
+  }, [currentTextbookId, changePage, handleUndo, handleRedo, saveHistory, triggerAutoSave, toggleFullscreen]);
 
   // ==========================================
   // レンダリング
@@ -1727,9 +1827,12 @@ export default function App() {
     return <div className="h-dvh w-full flex items-center justify-center bg-amber-50/40"><div className="flex flex-col items-center gap-4 text-amber-600"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-amber-500"></div><div className="text-xl font-bold animate-pulse">システムを準備中...</div></div></div>;
   }
 
+  // 全画面表示中はヘッダー・ツールバー・フッターを隠して学習領域を最大化する
+  const hideChrome = isFullscreen && !!currentTextbookId;
+
   return (
     <div className="h-dvh w-full flex flex-col bg-slate-100 overflow-hidden relative">
-      <Header onGoHome={currentTextbookId ? () => setCurrentTextbookId(null) : null} title={currentTextbook?.title} />
+      {!hideChrome && <Header onGoHome={currentTextbookId ? () => { setIsFullscreen(false); setCurrentTextbookId(null); } : null} title={currentTextbook?.title} />}
       
       {/* --- ホーム画面 --- */}
       {!currentTextbookId && (
@@ -1797,7 +1900,7 @@ export default function App() {
       {currentTextbookId && (
         <>
           {/* ツールバー (折り返し対応) */}
-          <div className="bg-white border-b border-slate-200 shadow-sm z-10 relative">
+          <div className={`bg-white border-b border-slate-200 shadow-sm z-10 relative ${hideChrome ? 'hidden' : ''}`}>
             <div className="flex flex-wrap px-1.5 sm:px-4 py-1.5 sm:py-2 gap-y-1.5 gap-x-1.5 sm:gap-x-3 items-center mx-auto justify-center">
               
               {/* Undo / Redo */}
@@ -1919,6 +2022,37 @@ export default function App() {
               
               <div className="w-px h-8 bg-slate-300 rounded-full hidden lg:block"></div>
 
+              {/* 表示モード (全体 / 半ページ) */}
+              <div className="relative">
+                <button onClick={() => { const wasOpen = showViewMenu; closeAllMenus(); setShowViewMenu(!wasOpen); }} title="表示のしかた" className={`flex items-center gap-1.5 border-2 font-bold px-2.5 sm:px-3 py-2 rounded-xl transition-all active:scale-95 text-sm ${viewMode === 'half' || showViewMenu ? 'bg-amber-100 border-amber-400 text-amber-700 shadow-inner' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm'}`}>
+                  <Columns size={16} /> <span className="hidden md:inline">表示</span>
+                </button>
+                {showViewMenu && (
+                  <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 bg-white border border-slate-200 p-2 rounded-xl shadow-xl z-50 flex flex-col gap-1 w-56 animate-in fade-in slide-in-from-top-2">
+                    <button onClick={() => selectViewMode('full')} className="flex items-center justify-between gap-2 p-2.5 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 transition-colors text-left">
+                      <span className="flex items-center gap-2"><BookOpen size={16} className="text-amber-500"/> ページ全体を表示</span>
+                      {viewMode === 'full' && <Check size={16} className="text-amber-500 shrink-0"/>}
+                    </button>
+                    <div className="text-[10px] font-bold text-slate-400 px-2 pt-1">半ページ表示 (縦向きの画面におすすめ)</div>
+                    <button onClick={() => selectViewMode('half', 'ltr')} className="flex items-center justify-between gap-2 p-2.5 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 transition-colors text-left">
+                      <span className="flex items-center gap-2"><Columns size={16} className="text-blue-500"/> 左半分から読む</span>
+                      {viewMode === 'half' && halfOrder === 'ltr' && <Check size={16} className="text-amber-500 shrink-0"/>}
+                    </button>
+                    <button onClick={() => selectViewMode('half', 'rtl')} className="flex items-center justify-between gap-2 p-2.5 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 transition-colors text-left">
+                      <span className="flex items-center gap-2"><Columns size={16} className="text-pink-500"/> 右半分から読む</span>
+                      {viewMode === 'half' && halfOrder === 'rtl' && <Check size={16} className="text-amber-500 shrink-0"/>}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* 全画面表示ボタン */}
+              <button onClick={toggleFullscreen} title="全画面表示 (F)" className="flex items-center gap-1.5 bg-white border-2 border-slate-200 hover:bg-slate-50 hover:border-amber-300 text-slate-600 font-bold px-2.5 sm:px-3 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm">
+                <Maximize size={16} /> <span className="hidden md:inline">全画面</span>
+              </button>
+
+              <div className="w-px h-8 bg-slate-300 rounded-full hidden lg:block"></div>
+
               {/* タイマー表示ボタン */}
               <button onClick={() => setShowTimer(!showTimer)} title="タイマー" className={`flex items-center gap-1.5 font-bold px-2.5 sm:px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm ${showTimer ? 'bg-blue-600 text-white shadow-inner' : 'bg-white border border-blue-200 text-blue-600 hover:bg-blue-50'}`}>
                 <Timer size={16} /> <span className="hidden md:inline">タイマー</span>
@@ -1949,8 +2083,26 @@ export default function App() {
             */}
             <div className="absolute inset-0 overflow-auto flex" onClick={closeAllMenus}>
               <div className="m-auto p-3">
-                <div style={canvasSize ? { width: canvasSize.w * fitScale * zoom, height: canvasSize.h * fitScale * zoom } : undefined}>
-                  <div className="bg-white shadow-xl rounded-sm" style={{ transform: `scale(${fitScale * zoom})`, transformOrigin: 'top left' }}>
+                {/*
+                  半ページ表示: キャンバス自体は常にページ全体を保持したまま、
+                  外側のラッパーを半分の幅にして overflow: hidden で切り抜く。
+                  右半分の表示は translateX で左へずらすことで実現する。
+                  (書き込み座標や保存データには一切影響しない)
+                */}
+                <div
+                  className={viewMode === 'half' ? 'overflow-hidden' : undefined}
+                  style={canvasSize ? {
+                    width: (viewMode === 'half' ? canvasSize.w / 2 : canvasSize.w) * fitScale * zoom,
+                    height: canvasSize.h * fitScale * zoom,
+                  } : undefined}
+                >
+                  <div
+                    className="bg-white shadow-xl rounded-sm"
+                    style={{
+                      transform: `translateX(${viewMode === 'half' && halfSide === 'right' && canvasSize ? -(canvasSize.w / 2) * fitScale * zoom : 0}px) scale(${fitScale * zoom})`,
+                      transformOrigin: 'top left',
+                    }}
+                  >
                     <canvas ref={canvasRef} />
                   </div>
                 </div>
@@ -1961,7 +2113,7 @@ export default function App() {
             
             {/* ページナビゲーション (Floating) */}
             <div className="absolute bottom-3 sm:bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-slate-800/80 backdrop-blur-md text-white rounded-full px-3 sm:px-4 py-1.5 sm:py-2 shadow-lg z-20 animate-in slide-in-from-bottom-5">
-              <button onClick={() => changePage(-1)} disabled={currentPage === 0} className="p-1 hover:text-amber-400 disabled:opacity-30 transition-colors"><ChevronLeft size={24} /></button>
+              <button onClick={() => changePage(-1)} disabled={!canGoPrev} className="p-1 hover:text-amber-400 disabled:opacity-30 transition-colors"><ChevronLeft size={24} /></button>
               
               <div className="relative flex items-center justify-center">
                 <button 
@@ -2000,10 +2152,25 @@ export default function App() {
                 )}
               </div>
 
-              <button onClick={() => changePage(1)} disabled={currentPage === currentPages.length - 1} className="p-1 hover:text-amber-400 disabled:opacity-30 transition-colors"><ChevronRight size={24} /></button>
+              {/* 半ページ表示中: いま見ている側の表示と切り替え */}
+              {viewMode === 'half' && (
+                <div className="flex bg-white/10 rounded-full p-0.5 ml-1">
+                  <button onClick={() => setHalfSide('left')} className={`px-2 py-0.5 text-[11px] font-bold rounded-full transition-colors ${halfSide === 'left' ? 'bg-amber-400 text-slate-900' : 'text-white/70 hover:text-white'}`}>左</button>
+                  <button onClick={() => setHalfSide('right')} className={`px-2 py-0.5 text-[11px] font-bold rounded-full transition-colors ${halfSide === 'right' ? 'bg-amber-400 text-slate-900' : 'text-white/70 hover:text-white'}`}>右</button>
+                </div>
+              )}
+
+              <button onClick={() => changePage(1)} disabled={!canGoNext} className="p-1 hover:text-amber-400 disabled:opacity-30 transition-colors"><ChevronRight size={24} /></button>
             </div>
 
             {/* ズーム＆クリア (Floating Right) */}
+            {/* 全画面表示中の終了ボタン (ヘッダー類が隠れるため常に見える位置に置く) */}
+            {hideChrome && (
+              <button onClick={toggleFullscreen} title="全画面を終了 (F)" className="absolute top-3 right-3 z-30 p-3 bg-slate-800/70 hover:bg-slate-800/90 backdrop-blur-md text-white rounded-full shadow-lg transition-all active:scale-95 animate-in fade-in">
+                <Minimize size={20} />
+              </button>
+            )}
+
             <div className="absolute bottom-3 right-3 sm:bottom-6 sm:right-6 flex flex-col gap-2 sm:gap-3 z-20">
               <div className="flex flex-col bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
                 <button onClick={() => setZoom(Math.min(3, zoom + 0.2))} className="p-2.5 sm:p-3 text-slate-600 hover:bg-slate-50 hover:text-amber-600 transition-colors border-b border-slate-100"><ZoomIn size={20} /></button>
@@ -2136,6 +2303,10 @@ export default function App() {
                 <div className="flex justify-between items-center border-b border-slate-100 pb-2">
                   <span className="text-slate-600 font-bold">QR読み取り</span>
                   <kbd className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded-lg font-mono font-bold text-xs">Q</kbd>
+                </div>
+                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                  <span className="text-slate-600 font-bold">全画面表示</span>
+                  <kbd className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded-lg font-mono font-bold text-xs">F</kbd>
                 </div>
                 <div className="flex justify-between items-center border-b border-slate-100 pb-2">
                   <span className="text-slate-600 font-bold">削除</span>
@@ -2278,7 +2449,7 @@ export default function App() {
         </div>
       )}
 
-      <Footer compact={!!currentTextbookId} />
+      {!hideChrome && <Footer compact={!!currentTextbookId} />}
     </div>
   );
 }
