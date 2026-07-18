@@ -27,6 +27,25 @@ const DB_KEY_VIEW_MODE = "digital_textbook_view_mode";
 const BACKUP_FORMAT = "digital-textbook-backup";
 const BACKUP_VERSION = 1;
 
+// ==========================================
+// Googleドライブ同期の設定
+// Google Cloud で発行した OAuth クライアントID を設定すると、
+// アプリから直接 Googleドライブ にデータを保存・復元できるようになります。
+// 設定方法は「GOOGLE_DRIVE_SETUP.md」を参照してください。
+//   ・ビルド時の環境変数  VITE_GOOGLE_CLIENT_ID  を設定するか
+//   ・下の "" の中に直接クライアントIDを貼り付けてください
+// 未設定の場合でもアプリは通常どおり動作し、同期パネルのみ非表示になります。
+// ==========================================
+const GOOGLE_CLIENT_ID =
+  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_GOOGLE_CLIENT_ID) || "";
+const GDRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+const GDRIVE_FILE_NAME = "digital-textbook-backup.json";
+const GIS_SRC = "https://accounts.google.com/gsi/client";
+
+const DB_KEY_DRIVE_FILE_ID = "digital_textbook_drive_file_id";
+const DB_KEY_DRIVE_AUTOSAVE = "digital_textbook_drive_autosave";
+const DB_KEY_DRIVE_LAST_SYNC = "digital_textbook_drive_last_sync";
+
 // スタンプのカテゴリとデータ
 const STAMP_CATEGORIES = [
   { id: 'eval', name: '評価' },
@@ -1088,6 +1107,36 @@ export default function App() {
   const [importPreview, setImportPreview] = useState(null); // { fileName, data, summary }
   const importFileInputRef = useRef(null);
 
+  // --- Googleドライブ同期 ---
+  const driveEnabled = !!GOOGLE_CLIENT_ID;
+  const [driveConnected, setDriveConnected] = useState(false);
+  const [driveBusy, setDriveBusy] = useState(null); // null | 'connecting' | 'saving' | 'loading'
+  const [driveAutoSave, setDriveAutoSave] = useState(() => localStorage.getItem(DB_KEY_DRIVE_AUTOSAVE) === '1');
+  const [driveLastSync, setDriveLastSync] = useState(() => localStorage.getItem(DB_KEY_DRIVE_LAST_SYNC) || '');
+  const gisTokenClientRef = useRef(null);
+  const driveTokenRef = useRef({ token: null, expiresAt: 0 });
+  const driveFileIdRef = useRef(localStorage.getItem(DB_KEY_DRIVE_FILE_ID) || null);
+  const driveAutoSaveTimerRef = useRef(null);
+
+  // 現在編集中のキャンバスを保存したうえでバックアップ用のデータを組み立てる
+  // (ファイル書き出し・Googleドライブ保存の両方で共有する)
+  const buildBackupPayload = useCallback(async () => {
+    if (fabricRef.current && currentTextbookId !== null) {
+      if (!drawingsRef.current[currentTextbookId]) drawingsRef.current[currentTextbookId] = {};
+      drawingsRef.current[currentTextbookId][currentPage] = serializeCanvas(fabricRef.current);
+      try { await window.idbKeyval.set(DB_KEY_DRAWINGS, drawingsRef.current); } catch (e) {}
+    }
+    return {
+      format: BACKUP_FORMAT,
+      version: BACKUP_VERSION,
+      exportedAt: new Date().toISOString(),
+      appName: APP_NAME,
+      textbooks,
+      drawings: drawingsRef.current || {},
+      myStamps,
+    };
+  }, [textbooks, myStamps, currentTextbookId, currentPage]);
+
   const handleExportBackup = useCallback(async () => {
     if (!isDataLoaded) return;
     if (textbooks.length === 0) {
@@ -1096,21 +1145,7 @@ export default function App() {
     }
     setIsExporting(true);
     try {
-      if (fabricRef.current && currentTextbookId !== null) {
-        if (!drawingsRef.current[currentTextbookId]) drawingsRef.current[currentTextbookId] = {};
-        drawingsRef.current[currentTextbookId][currentPage] = serializeCanvas(fabricRef.current);
-        try { await window.idbKeyval.set(DB_KEY_DRAWINGS, drawingsRef.current); } catch (e) {}
-      }
-
-      const payload = {
-        format: BACKUP_FORMAT,
-        version: BACKUP_VERSION,
-        exportedAt: new Date().toISOString(),
-        appName: APP_NAME,
-        textbooks,
-        drawings: drawingsRef.current || {},
-        myStamps,
-      };
+      const payload = await buildBackupPayload();
       const json = JSON.stringify(payload);
       const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -1129,7 +1164,26 @@ export default function App() {
     } finally {
       setIsExporting(false);
     }
-  }, [isDataLoaded, textbooks, myStamps, currentTextbookId, currentPage, showToast]);
+  }, [isDataLoaded, textbooks, buildBackupPayload, showToast]);
+
+  // バックアップデータから取り込み確認モーダルを開く
+  // (ファイル選択・Googleドライブからの復元の両方で共有する)
+  const openImportPreview = useCallback((data, sourceName) => {
+    if (!data || data.format !== BACKUP_FORMAT || !Array.isArray(data.textbooks)) {
+      showToast("このデータはバックアップ形式ではありません", "error");
+      return false;
+    }
+    const tbCount = data.textbooks.length;
+    const pageCount = data.textbooks.reduce((sum, tb) => sum + (Array.isArray(tb.pages) ? tb.pages.length : 0), 0);
+    const stampCount = Array.isArray(data.myStamps) ? data.myStamps.length : 0;
+    const exportedAt = data.exportedAt ? new Date(data.exportedAt).toLocaleString('ja-JP') : "不明";
+    setImportPreview({
+      fileName: sourceName,
+      data,
+      summary: { tbCount, pageCount, stampCount, exportedAt },
+    });
+    return true;
+  }, [showToast]);
 
   const handleImportFileSelected = useCallback(async (e) => {
     const file = e.target.files && e.target.files[0];
@@ -1138,24 +1192,12 @@ export default function App() {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      if (!data || data.format !== BACKUP_FORMAT || !Array.isArray(data.textbooks)) {
-        showToast("このファイルはバックアップ形式ではありません", "error");
-        return;
-      }
-      const tbCount = data.textbooks.length;
-      const pageCount = data.textbooks.reduce((sum, tb) => sum + (Array.isArray(tb.pages) ? tb.pages.length : 0), 0);
-      const stampCount = Array.isArray(data.myStamps) ? data.myStamps.length : 0;
-      const exportedAt = data.exportedAt ? new Date(data.exportedAt).toLocaleString('ja-JP') : "不明";
-      setImportPreview({
-        fileName: file.name,
-        data,
-        summary: { tbCount, pageCount, stampCount, exportedAt },
-      });
+      openImportPreview(data, file.name);
     } catch (err) {
       console.error(err);
       showToast("ファイルの読み込みに失敗しました", "error");
     }
-  }, [showToast]);
+  }, [openImportPreview, showToast]);
 
   const applyImport = useCallback(async (mode) => {
     if (!importPreview) return;
@@ -1229,6 +1271,234 @@ export default function App() {
       setImportPreview(null);
     }
   }, [importPreview, textbooks, myStamps, showToast]);
+
+  // ==========================================
+  // Googleドライブ同期のロジック
+  // Google Identity Services (GIS) でアクセストークンを取得し、
+  // Drive REST API を直接呼び出して自分のドライブにバックアップを保存/復元する。
+  // スコープは drive.file (このアプリが作成したファイルのみ) なので、
+  // 他のドライブ内ファイルには一切アクセスしない。
+  // ==========================================
+
+  // GIS スクリプトを必要になったタイミングで読み込む
+  const ensureGisLoaded = useCallback(() => new Promise((resolve, reject) => {
+    if (window.google && window.google.accounts && window.google.accounts.oauth2) {
+      resolve(); return;
+    }
+    const existing = document.querySelector(`script[src="${GIS_SRC}"]`);
+    if (existing) {
+      existing.addEventListener('load', () => resolve());
+      existing.addEventListener('error', () => reject(new Error('GIS読み込み失敗')));
+      return;
+    }
+    const s = document.createElement('script');
+    s.src = GIS_SRC; s.async = true; s.defer = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('GIS読み込み失敗'));
+    document.head.appendChild(s);
+  }), []);
+
+  // 有効なアクセストークンを取得する (期限切れ・未取得なら要求する)
+  const getDriveToken = useCallback(async (interactive) => {
+    const now = Date.now();
+    if (driveTokenRef.current.token && driveTokenRef.current.expiresAt - 60000 > now) {
+      return driveTokenRef.current.token;
+    }
+    await ensureGisLoaded();
+    if (!gisTokenClientRef.current) {
+      gisTokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: GDRIVE_SCOPE,
+        callback: () => {}, // 呼び出しごとに差し替える
+      });
+    }
+    return new Promise((resolve, reject) => {
+      gisTokenClientRef.current.callback = (resp) => {
+        if (resp && resp.error) { reject(new Error(resp.error)); return; }
+        driveTokenRef.current = {
+          token: resp.access_token,
+          expiresAt: Date.now() + ((resp.expires_in || 3600) * 1000),
+        };
+        setDriveConnected(true);
+        resolve(resp.access_token);
+      };
+      try {
+        gisTokenClientRef.current.requestAccessToken({ prompt: interactive ? '' : 'none' });
+      } catch (err) { reject(err); }
+    });
+  }, [ensureGisLoaded]);
+
+  // Drive API 呼び出し用のラッパー (401 のときは一度だけ再認証して再試行)
+  const driveFetch = useCallback(async (url, opts = {}, retry = true) => {
+    const token = await getDriveToken(false);
+    const res = await fetch(url, {
+      ...opts,
+      headers: { ...(opts.headers || {}), Authorization: `Bearer ${token}` },
+    });
+    if (res.status === 401 && retry) {
+      driveTokenRef.current = { token: null, expiresAt: 0 };
+      return driveFetch(url, opts, false);
+    }
+    return res;
+  }, [getDriveToken]);
+
+  // このアプリが作成したバックアップファイルのIDを探す
+  const findDriveFileId = useCallback(async () => {
+    if (driveFileIdRef.current) {
+      // 保存済みIDがまだ有効か軽く確認する
+      const check = await driveFetch(
+        `https://www.googleapis.com/drive/v3/files/${driveFileIdRef.current}?fields=id,trashed`
+      );
+      if (check.ok) {
+        const info = await check.json();
+        if (!info.trashed) return driveFileIdRef.current;
+      }
+      driveFileIdRef.current = null;
+      localStorage.removeItem(DB_KEY_DRIVE_FILE_ID);
+    }
+    const q = encodeURIComponent(`name='${GDRIVE_FILE_NAME}' and trashed=false`);
+    const res = await driveFetch(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&spaces=drive&fields=files(id,modifiedTime)&orderBy=modifiedTime desc&pageSize=1`
+    );
+    if (!res.ok) throw new Error('ドライブの検索に失敗しました');
+    const json = await res.json();
+    const found = json.files && json.files[0];
+    if (found) {
+      driveFileIdRef.current = found.id;
+      localStorage.setItem(DB_KEY_DRIVE_FILE_ID, found.id);
+      return found.id;
+    }
+    return null;
+  }, [driveFetch]);
+
+  // バックアップをドライブに保存する (新規作成 or 上書き)。レジューム可能アップロードで大容量PDFにも対応。
+  const uploadToDrive = useCallback(async (payload) => {
+    const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+    const existingId = await findDriveFileId();
+    const metadata = existingId
+      ? {}
+      : { name: GDRIVE_FILE_NAME, mimeType: 'application/json', description: 'デジタル教科書メーカーのバックアップ' };
+    const initUrl = existingId
+      ? `https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=resumable`
+      : `https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable`;
+    const initRes = await driveFetch(initUrl, {
+      method: existingId ? 'PATCH' : 'POST',
+      headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+      body: JSON.stringify(metadata),
+    });
+    if (!initRes.ok) throw new Error('アップロードの開始に失敗しました');
+    const sessionUri = initRes.headers.get('Location');
+    if (!sessionUri) throw new Error('アップロードセッションを取得できませんでした');
+    // セッションURIへは Authorization ヘッダー不要 (URI自体に認可が含まれる)
+    const putRes = await fetch(sessionUri, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: blob,
+    });
+    if (!putRes.ok) throw new Error('データのアップロードに失敗しました');
+    const info = await putRes.json();
+    if (info && info.id) {
+      driveFileIdRef.current = info.id;
+      localStorage.setItem(DB_KEY_DRIVE_FILE_ID, info.id);
+    }
+    const stamp = new Date().toLocaleString('ja-JP');
+    localStorage.setItem(DB_KEY_DRIVE_LAST_SYNC, stamp);
+    setDriveLastSync(stamp);
+  }, [driveFetch, findDriveFileId]);
+
+  // ドライブに接続する (トークンを取得)
+  const handleDriveConnect = useCallback(async () => {
+    if (!driveEnabled) return;
+    setDriveBusy('connecting');
+    try {
+      await getDriveToken(true);
+      showToast('Googleドライブに接続しました', 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('Googleドライブへの接続に失敗しました', 'error');
+    } finally {
+      setDriveBusy(null);
+    }
+  }, [driveEnabled, getDriveToken, showToast]);
+
+  const handleDriveDisconnect = useCallback(() => {
+    const token = driveTokenRef.current.token;
+    if (token && window.google && window.google.accounts && window.google.accounts.oauth2) {
+      try { window.google.accounts.oauth2.revoke(token, () => {}); } catch (e) {}
+    }
+    driveTokenRef.current = { token: null, expiresAt: 0 };
+    setDriveConnected(false);
+    showToast('Googleドライブとの接続を解除しました', 'success');
+  }, [showToast]);
+
+  // 手動でドライブに保存する
+  const handleDriveSave = useCallback(async () => {
+    if (!driveEnabled || !isDataLoaded) return;
+    if (textbooks.length === 0) {
+      showToast('保存する教科書がありません', 'error');
+      return;
+    }
+    setDriveBusy('saving');
+    try {
+      const payload = await buildBackupPayload();
+      await uploadToDrive(payload);
+      showToast('Googleドライブに保存しました', 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('Googleドライブへの保存に失敗しました', 'error');
+    } finally {
+      setDriveBusy(null);
+    }
+  }, [driveEnabled, isDataLoaded, textbooks, buildBackupPayload, uploadToDrive, showToast]);
+
+  // ドライブから復元する (取り込み確認モーダルを開く)
+  const handleDriveLoad = useCallback(async () => {
+    if (!driveEnabled) return;
+    setDriveBusy('loading');
+    try {
+      await getDriveToken(true);
+      const fileId = await findDriveFileId();
+      if (!fileId) {
+        showToast('ドライブに保存されたバックアップが見つかりません', 'error');
+        return;
+      }
+      const res = await driveFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
+      if (!res.ok) throw new Error('ダウンロードに失敗しました');
+      const data = await res.json();
+      openImportPreview(data, `Googleドライブ (${GDRIVE_FILE_NAME})`);
+    } catch (err) {
+      console.error(err);
+      showToast('Googleドライブからの読み込みに失敗しました', 'error');
+    } finally {
+      setDriveBusy(null);
+    }
+  }, [driveEnabled, getDriveToken, findDriveFileId, driveFetch, openImportPreview, showToast]);
+
+  const handleToggleAutoSave = useCallback(async () => {
+    const next = !driveAutoSave;
+    setDriveAutoSave(next);
+    localStorage.setItem(DB_KEY_DRIVE_AUTOSAVE, next ? '1' : '0');
+    if (next && !driveConnected) {
+      try { await getDriveToken(true); } catch (e) { /* 接続失敗時もトグルは維持し次回に再試行 */ }
+    }
+    showToast(next ? '自動保存をオンにしました' : '自動保存をオフにしました', 'success');
+  }, [driveAutoSave, driveConnected, getDriveToken, showToast]);
+
+  // 自動保存: 接続中かつ自動保存オンのとき、データ変更を検知して少し待ってからドライブへ保存する。
+  // historyTrigger を含めることで、ページへの書き込み(お絵かき)も検知できる。
+  useEffect(() => {
+    if (!driveEnabled || !driveAutoSave || !driveConnected || !isDataLoaded) return;
+    if (textbooks.length === 0) return;
+    if (driveAutoSaveTimerRef.current) clearTimeout(driveAutoSaveTimerRef.current);
+    driveAutoSaveTimerRef.current = setTimeout(async () => {
+      try {
+        const payload = await buildBackupPayload();
+        await uploadToDrive(payload);
+      } catch (e) { console.error('ドライブ自動保存に失敗しました', e); }
+    }, 4000); // 4秒デバウンス
+    return () => { if (driveAutoSaveTimerRef.current) clearTimeout(driveAutoSaveTimerRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [textbooks, myStamps, historyTrigger, driveEnabled, driveAutoSave, driveConnected, isDataLoaded]);
 
   const deleteTextbook = (id, e) => {
     e.stopPropagation();
@@ -1871,10 +2141,78 @@ export default function App() {
                 />
               </div>
             </div>
+            {/* --- Googleドライブ同期パネル (クライアントID設定時のみ表示) --- */}
+            {driveEnabled && (
+              <div className="mb-6 bg-white border-2 border-sky-200 rounded-2xl p-4 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="bg-sky-100 p-2 rounded-xl text-sky-600 shadow-inner shrink-0"><Cloud size={22} /></div>
+                    <div className="min-w-0">
+                      <div className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                        Googleドライブ同期
+                        {driveConnected && (
+                          <span className="inline-flex items-center gap-0.5 text-[11px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full"><Check size={11} /> 接続中</span>
+                        )}
+                      </div>
+                      <div className="text-[11px] font-bold text-slate-400">
+                        {driveLastSync ? `最終保存: ${driveLastSync}` : '別の端末でも同じGoogleアカウントで接続すれば同期できます'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {!driveConnected ? (
+                      <button
+                        onClick={handleDriveConnect}
+                        disabled={driveBusy !== null}
+                        className="flex items-center gap-1.5 bg-sky-500 hover:bg-sky-600 text-white font-bold px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {driveBusy === 'connecting' ? <Loader2 size={16} className="animate-spin" /> : <Cloud size={16} />}
+                        Googleドライブに接続
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          onClick={handleDriveSave}
+                          disabled={driveBusy !== null || textbooks.length === 0}
+                          title="いまのデータをGoogleドライブに保存します"
+                          className="flex items-center gap-1.5 bg-sky-500 hover:bg-sky-600 text-white font-bold px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {driveBusy === 'saving' ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                          ドライブに保存
+                        </button>
+                        <button
+                          onClick={handleDriveLoad}
+                          disabled={driveBusy !== null}
+                          title="Googleドライブに保存したデータを取り込みます"
+                          className="flex items-center gap-1.5 bg-white border-2 border-sky-300 hover:bg-sky-50 text-sky-600 font-bold px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {driveBusy === 'loading' ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                          ドライブから復元
+                        </button>
+                        <button
+                          onClick={handleDriveDisconnect}
+                          disabled={driveBusy !== null}
+                          title="接続を解除します"
+                          className="flex items-center gap-1 text-slate-400 hover:text-red-500 hover:bg-red-50 font-bold px-2.5 py-2 rounded-xl transition-all active:scale-95 text-xs disabled:opacity-40"
+                        >
+                          <X size={14} /> 切断
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <label className="mt-3 flex items-center gap-2 text-xs font-bold text-slate-500 cursor-pointer select-none w-fit">
+                  <input type="checkbox" checked={driveAutoSave} onChange={handleToggleAutoSave} className="w-4 h-4 accent-sky-500" />
+                  自動保存（書き込みや変更を、少し待ってから自動でドライブへ保存します）
+                </label>
+              </div>
+            )}
             <div className="mb-6 flex items-start gap-2 text-xs font-bold text-slate-500 bg-amber-50/70 border border-amber-200 rounded-xl p-3">
               <Cloud size={16} className="text-amber-500 mt-0.5 shrink-0" />
               <span>
-                書き出したJSONファイルをGoogleドライブに保存しておけば、別の端末でログインして同じファイルを「取り込む」ことで、教科書・書き込み・マイスタンプをまるごと復元できます。
+                {driveEnabled
+                  ? '「Googleドライブに接続」すると、ボタン1つでデータを保存でき、別の端末で同じアカウントに接続して「ドライブから復元」するだけで同期できます。JSONファイルの書き出し／取り込みも引き続き利用できます。'
+                  : '書き出したJSONファイルをGoogleドライブに保存しておけば、別の端末でログインして同じファイルを「取り込む」ことで、教科書・書き込み・マイスタンプをまるごと復元できます。'}
               </span>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
