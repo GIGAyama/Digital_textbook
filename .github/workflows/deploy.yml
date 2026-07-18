@@ -26,6 +26,11 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          # Googleドライブ同期を有効にする場合は、リポジトリの
+          # Settings → Secrets and variables → Actions → Variables に
+          # VITE_GOOGLE_CLIENT_ID を登録してください（未登録なら同期機能は無効のまま）。
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
 
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@v4
