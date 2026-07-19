@@ -37,7 +37,7 @@ const BACKUP_VERSION = 1;
 // 未設定の場合でもアプリは通常どおり動作し、同期パネルのみ非表示になります。
 // ==========================================
 const GOOGLE_CLIENT_ID =
-  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_GOOGLE_CLIENT_ID) || "";
+  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_GOOGLE_CLIENT_ID) || "521749104068-2455o6p38or3tnerqjmllsjrnoc4kqq3.apps.googleusercontent.com";
 const GDRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const GDRIVE_FILE_NAME = "digital-textbook-backup.json";
 const GIS_SRC = "https://accounts.google.com/gsi/client";
