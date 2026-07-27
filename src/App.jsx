@@ -242,6 +242,12 @@ const STAMPS_DATA = {
 const COLORS = ['#000000', '#ef4444', '#3b82f6', '#22c55e', '#f59e0b'];
 const STICKY_COLORS = ['#fff740', '#ffccff', '#ccffff', '#ccffcc'];
 
+// スマホ・タブレットでの「戻る」スワイプ(ジェスチャー操作)の判定値
+const EDGE_SWIPE_ZONE = 28;       // 画面の左右の端からこの範囲(px)で始まったスワイプを対象にする
+const EDGE_SWIPE_DISTANCE = 64;   // 中央方向へこれ以上(px)動いたら「戻る」とみなす
+const EDGE_SWIPE_MAX_SLOPE = 60;  // 縦方向のずれ(px)がこれを超えたらスクロール操作とみなして中止する
+const BACK_NAV_INTERVAL = 400;    // 「戻る」が二重に処理されるのを防ぐ最小間隔(ms)
+
 const hexToRgba = (hex, alpha) => {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
@@ -708,6 +714,15 @@ export default function App() {
   const closeAllMenus = useCallback(() => {
     setShowStampMenu(false); setShowShapeMenu(false); setShowStickyMenu(false); setShowLinkMenu(false); setShowPageJump(false); setShowViewMenu(false);
   }, []);
+
+  // 教科書画面から一覧(ホーム)へ戻る。ボタンと「戻る」操作で共通に使う
+  const goToLibrary = useCallback(() => {
+    closeAllMenus();
+    setShowTimer(false);
+    setShowToolbar(false);
+    setIsFullscreen(false);
+    setCurrentTextbookId(null);
+  }, [closeAllMenus]);
 
   // 枠で囲んだ範囲、または画面全体をスキャンする
   const scanQRCode = useCallback(async (rect) => {
@@ -2072,6 +2087,137 @@ export default function App() {
   }, [currentTextbookId, changePage, handleUndo, handleRedo, saveHistory, triggerAutoSave, toggleFullscreen]);
 
   // ==========================================
+  // --- スマホ・タブレットの「戻る」操作 ---
+  // Androidのナビゲーションバーの「戻る」や、画面の端から中央へのスワイプ
+  // (ジェスチャー操作)で、1つ前の階層へ戻れるようにする。
+  // 履歴に常に「戻り先」を1件積んでおくことで、ブラウザの戻る操作でページを
+  // 離れてしまったり、ホーム画面から起動したアプリが終了したりするのを防ぐ。
+  // ==========================================
+
+  // 重なっているものを上から順に1つだけ閉じる(= 1階層だけ戻る)
+  const handleBackNavigation = () => {
+    // 共有データの受信中は処理を中断させない
+    if (shareMode === 'receiving') return;
+
+    // 1. モーダル(最前面にあるものから順に)
+    if (dialog) { setDialog(null); return; }
+    if (importPreview) { setImportPreview(null); return; }
+    if (showMyStampCreator) { setShowMyStampCreator(false); return; }
+    if (showShortcuts) { setShowShortcuts(false); return; }
+    if (shareMode === 'hosting') { stopHosting(); return; }
+
+    // 2. ツールバーから開いたメニュー・パネル
+    if (showStampMenu || showShapeMenu || showStickyMenu || showLinkMenu || showPageJump || showViewMenu) {
+      closeAllMenus(); return;
+    }
+    if (showTimer) { setShowTimer(false); return; }
+    if (showToolbar) { closeAllMenus(); setShowToolbar(false); return; }
+
+    // 3. 全画面表示 → 通常表示
+    if (isFullscreen) { toggleFullscreen(); return; }
+
+    // 4. 教科書の画面 → 一覧
+    if (currentTextbookId) { goToLibrary(); return; }
+
+    // 5. 一覧が最初の画面。アプリを終了させないため、ここでは何もせず知らせるだけ
+    showToast("ここが最初の画面です", "info");
+  };
+
+  // イベントリスナーは一度だけ登録するため、常に最新の処理を ref 経由で呼ぶ
+  const backNavigationRef = useRef(handleBackNavigation);
+  useEffect(() => { backNavigationRef.current = handleBackNavigation; });
+
+  // ナビゲーションバーの「戻る」とスワイプが同時に反応して2階層戻ってしまうのを防ぐ
+  const lastBackAtRef = useRef(0);
+  const requestBackNavigation = useCallback(() => {
+    const now = Date.now();
+    if (now - lastBackAtRef.current < BACK_NAV_INTERVAL) return;
+    lastBackAtRef.current = now;
+    backNavigationRef.current();
+  }, []);
+
+  // 履歴に「戻り先」を1件積む(常に1件残しておくのが基本方針)
+  const pushHistoryGuard = useCallback(() => {
+    try { window.history.pushState({ dtBackGuard: true }, ''); } catch (e) {}
+  }, []);
+
+  const historyGuardReadyRef = useRef(false);
+  useEffect(() => {
+    if (!historyGuardReadyRef.current) {
+      historyGuardReadyRef.current = true;
+      if (!(window.history.state && window.history.state.dtBackGuard)) pushHistoryGuard();
+    }
+
+    const onPopState = () => {
+      // 先に履歴を積み直すことで、ブラウザの戻る(ページ離脱・アプリ終了)を確実に防ぐ
+      pushHistoryGuard();
+      requestBackNavigation();
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [pushHistoryGuard, requestBackNavigation]);
+
+  // 画面の左右の端から中央へ向かうスワイプを「戻る」として扱う。
+  // iPhone・iPadでホーム画面に追加した場合など、システムの戻るジェスチャーが
+  // 使えない環境でも同じ操作で戻れるようにする。
+  useEffect(() => {
+    // 指で操作する端末(スマホ・タブレット)のみ有効にする
+    const isTouchDevice =
+      (window.matchMedia && window.matchMedia('(any-pointer: coarse)').matches) || 'ontouchstart' in window;
+    if (!isTouchDevice) return;
+
+    let swipe = null;
+
+    // ボタンや入力欄の操作は妨げない
+    const isInteractive = (el) =>
+      !!(el && el.closest && el.closest('button, a, input, select, textarea, label, [role="button"]'));
+
+    const onTouchStart = (e) => {
+      swipe = null; // 2本目の指が触れたとき(ピンチ操作など)も中止する
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      if (t.touchType === 'stylus') return; // ペンでの書き込みは妨げない
+      const fromLeft = t.clientX <= EDGE_SWIPE_ZONE;
+      const fromRight = t.clientX >= window.innerWidth - EDGE_SWIPE_ZONE;
+      if (!fromLeft && !fromRight) return;
+      if (isInteractive(e.target)) return;
+      swipe = { id: t.identifier, x: t.clientX, y: t.clientY, dir: fromLeft ? 1 : -1 };
+      // キャンバスに線が引かれてしまわないよう、ここで伝播を止める
+      e.stopPropagation();
+    };
+
+    const onTouchMove = (e) => {
+      if (!swipe) return;
+      const t = Array.prototype.find.call(e.touches, (touch) => touch.identifier === swipe.id);
+      if (!t) { swipe = null; return; }
+      const moved = (t.clientX - swipe.x) * swipe.dir;
+      // 縦方向の動きが大きいときはスクロール操作とみなす
+      if (Math.abs(t.clientY - swipe.y) > EDGE_SWIPE_MAX_SLOPE) { swipe = null; return; }
+      e.stopPropagation();
+      if (moved >= EDGE_SWIPE_DISTANCE) {
+        swipe = null;
+        if (e.cancelable) e.preventDefault();
+        requestBackNavigation();
+      }
+    };
+
+    const onTouchEnd = () => { swipe = null; };
+
+    // capture フェーズで受け取り、キャンバス(fabric.js)より先に判定する
+    const opts = { capture: true, passive: false };
+    window.addEventListener('touchstart', onTouchStart, opts);
+    window.addEventListener('touchmove', onTouchMove, opts);
+    window.addEventListener('touchend', onTouchEnd, opts);
+    window.addEventListener('touchcancel', onTouchEnd, opts);
+    return () => {
+      window.removeEventListener('touchstart', onTouchStart, opts);
+      window.removeEventListener('touchmove', onTouchMove, opts);
+      window.removeEventListener('touchend', onTouchEnd, opts);
+      window.removeEventListener('touchcancel', onTouchEnd, opts);
+    };
+  }, [requestBackNavigation]);
+
+  // ==========================================
   // レンダリング
   // ==========================================
   if (scriptError) {
@@ -2244,7 +2390,7 @@ export default function App() {
           {!showToolbar && (
             <div className="absolute top-3 left-3 z-40 flex items-center gap-2 animate-in fade-in">
               <button
-                onClick={() => { setIsFullscreen(false); setCurrentTextbookId(null); setShowToolbar(false); }}
+                onClick={goToLibrary}
                 title="一覧へ戻る"
                 className="flex items-center gap-1 text-sm font-bold text-slate-600 bg-white/90 backdrop-blur border border-slate-200 hover:bg-white hover:text-amber-600 px-2.5 sm:px-3 py-2 rounded-xl shadow-md transition-all active:scale-95"
               >
@@ -2266,7 +2412,7 @@ export default function App() {
             <div className="flex flex-wrap px-1.5 sm:px-4 py-1.5 sm:py-2 gap-y-1.5 gap-x-1.5 sm:gap-x-3 items-center mx-auto justify-center">
 
               {/* 一覧へ戻る */}
-              <button onClick={() => { setIsFullscreen(false); setCurrentTextbookId(null); setShowToolbar(false); }} title="一覧へ戻る" className="flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-amber-600 bg-slate-100 hover:bg-amber-50 px-2 sm:px-3 py-1.5 rounded-xl transition-all active:scale-95">
+              <button onClick={goToLibrary} title="一覧へ戻る" className="flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-amber-600 bg-slate-100 hover:bg-amber-50 px-2 sm:px-3 py-1.5 rounded-xl transition-all active:scale-95">
                 <ChevronLeft size={18} /> <span className="hidden sm:inline">一覧へ戻る</span>
               </button>
 
@@ -2627,8 +2773,8 @@ export default function App() {
       {/* ショートカットキーモーダル */}
       {showShortcuts && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[600] p-4 animate-in fade-in" onClick={() => setShowShortcuts(false)}>
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90dvh] flex flex-col animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
               <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2">
                 <Info className="text-amber-500"/> ショートカットキー
               </h3>
@@ -2636,7 +2782,7 @@ export default function App() {
                 <X size={20}/>
               </button>
             </div>
-            <div className="p-6">
+            <div className="p-6 overflow-y-auto">
               <div className="grid grid-cols-2 gap-y-4 gap-x-8 text-sm">
                 <div className="flex justify-between items-center border-b border-slate-100 pb-2">
                   <span className="text-slate-600 font-bold">次のページ</span>
@@ -2691,7 +2837,21 @@ export default function App() {
                   <kbd className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded-lg font-mono font-bold text-xs">Del / BS</kbd>
                 </div>
               </div>
-              <div className="mt-6 text-center text-xs text-slate-500 font-bold">
+              {/* スマホ・タブレットでの「戻る」操作の案内 */}
+              <div className="mt-6 bg-amber-50/70 border border-amber-200 rounded-xl p-4">
+                <div className="font-bold text-sm text-slate-700 mb-2 flex items-center gap-1.5">
+                  <ChevronLeft size={16} className="text-amber-500" /> スマホ・タブレットで「戻る」
+                </div>
+                <ul className="text-xs font-bold text-slate-500 leading-relaxed list-disc pl-5 space-y-0.5">
+                  <li>画面下のナビゲーションバーの「戻る」をタップ</li>
+                  <li>画面の左右どちらかの端から、中央に向かってスワイプ</li>
+                </ul>
+                <p className="text-[11px] font-bold text-slate-400 mt-2 leading-relaxed">
+                  開いているメニュー → 全画面表示 → 教科書の画面 → 一覧 の順に、1つずつ戻ります。
+                  アプリが終了したり、ブラウザで別のページへ移動したりすることはありません。
+                </p>
+              </div>
+              <div className="mt-4 text-center text-xs text-slate-500 font-bold">
                 「?」キーを押すことでも、この画面を開閉できます。
               </div>
             </div>
@@ -2822,7 +2982,11 @@ export default function App() {
       {/* カスタムトースト通知 */}
       {toast && (
         <div className={`fixed bottom-6 right-6 md:bottom-10 md:right-10 px-5 py-3.5 rounded-2xl shadow-xl font-bold flex items-center gap-3 animate-in slide-in-from-bottom-5 z-[400] ${toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-slate-800 text-white'}`}>
-          {toast.type === 'error' ? <AlertCircle size={20}/> : <CheckCircle2 size={20} className="text-green-400"/>}
+          {toast.type === 'error'
+            ? <AlertCircle size={20}/>
+            : toast.type === 'info'
+              ? <Info size={20} className="text-sky-300"/>
+              : <CheckCircle2 size={20} className="text-green-400"/>}
           {toast.message}
         </div>
       )}
