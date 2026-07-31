@@ -248,6 +248,11 @@ const EDGE_SWIPE_DISTANCE = 64;   // 中央方向へこれ以上(px)動いたら
 const EDGE_SWIPE_MAX_SLOPE = 60;  // 縦方向のずれ(px)がこれを超えたらスクロール操作とみなして中止する
 const BACK_NAV_INTERVAL = 400;    // 「戻る」が二重に処理されるのを防ぐ最小間隔(ms)
 
+// 選択モードでの「ページ送り」スワイプの判定値
+const PAGE_SWIPE_SLOP = 12;       // この距離(px)動いた時点で、ページ送りか縦スクロールかを見分ける
+const PAGE_SWIPE_DISTANCE = 80;   // 横方向へこれ以上(px)動いたらページを送る
+const OBJECT_GRAB_MARGIN = 24;    // 選択中の図形のこの範囲(px)内から始めた操作は、図形の移動を優先する
+
 const hexToRgba = (hex, alpha) => {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
@@ -679,6 +684,7 @@ export default function App() {
   const canvasRef = useRef(null);
   const fabricRef = useRef(null);
   const containerRef = useRef(null);
+  const canvasScrollRef = useRef(null); // キャンバスを包むスクロール領域(ページ送りスワイプの判定に使う)
   const drawingsRef = useRef({});
   
   // History & Debounce Refs
@@ -2217,6 +2223,99 @@ export default function App() {
     };
   }, [requestBackNavigation]);
 
+  // 選択モード(既定のモード)のとき、キャンバスを横にスワイプしてページを送れるようにする。
+  // えんぴつなどの書き込みモードでは線が引けなくなってしまうため、選択モードだけで有効にする。
+  useEffect(() => {
+    if (!currentTextbookId || mode !== 'select') return;
+
+    // 指で操作する端末(スマホ・タブレット)のみ有効にする
+    const isTouchDevice =
+      (window.matchMedia && window.matchMedia('(any-pointer: coarse)').matches) || 'ontouchstart' in window;
+    if (!isTouchDevice) return;
+
+    const scrollEl = canvasScrollRef.current;
+    if (!scrollEl) return;
+
+    let swipe = null;
+
+    // ボタンや入力欄の操作は妨げない
+    const isInteractive = (el) =>
+      !!(el && el.closest && el.closest('button, a, input, select, textarea, label, [role="button"]'));
+
+    // 図形・付箋などを掴んでいるときは、ページ送りではなく移動・変形を優先する
+    const isOnObject = (e) => {
+      const canvas = fabricRef.current;
+      if (!canvas) return false;
+      try {
+        if (canvas.findTarget(e)) return true;
+        const active = canvas.getActiveObject();
+        if (active) {
+          // 拡大・回転のハンドルは図形の外側にあるため、少し広めに判定する
+          const r = active.getBoundingRect();
+          const p = canvas.getPointer(e);
+          if (p.x >= r.left - OBJECT_GRAB_MARGIN && p.x <= r.left + r.width + OBJECT_GRAB_MARGIN &&
+              p.y >= r.top - OBJECT_GRAB_MARGIN && p.y <= r.top + r.height + OBJECT_GRAB_MARGIN) return true;
+        }
+      } catch (err) { /* 判定できないときはスワイプを許可する */ }
+      return false;
+    };
+
+    const onTouchStart = (e) => {
+      swipe = null; // 2本目の指が触れたとき(ピンチ操作など)も中止する
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      if (t.touchType === 'stylus') return;             // ペンでの操作は妨げない
+      if (isInteractive(e.target)) return;
+      // 画面の端から始まるスワイプは「戻る」操作なので、ここでは扱わない
+      if (t.clientX <= EDGE_SWIPE_ZONE || t.clientX >= window.innerWidth - EDGE_SWIPE_ZONE) return;
+      // 拡大して横にはみ出しているときは、スクロールして見る操作を優先する
+      if (scrollEl.scrollWidth > scrollEl.clientWidth + 1) return;
+      if (isOnObject(e)) return;
+      swipe = { id: t.identifier, x: t.clientX, y: t.clientY, active: false };
+    };
+
+    const onTouchMove = (e) => {
+      if (!swipe) return;
+      if (e.touches.length !== 1) { swipe = null; return; }
+      const t = Array.prototype.find.call(e.touches, (touch) => touch.identifier === swipe.id);
+      if (!t) { swipe = null; return; }
+
+      const dx = t.clientX - swipe.x;
+      const dy = t.clientY - swipe.y;
+
+      // 最初の少しの動きで、ページ送りか縦スクロールかを見分ける
+      if (!swipe.active) {
+        if (Math.abs(dy) > PAGE_SWIPE_SLOP && Math.abs(dy) >= Math.abs(dx)) { swipe = null; return; }
+        if (Math.abs(dx) <= PAGE_SWIPE_SLOP) return;
+        swipe.active = true;
+      }
+
+      // キャンバスに範囲選択の枠が出てしまわないよう、ここで伝播を止める
+      e.stopPropagation();
+      if (Math.abs(dx) >= PAGE_SWIPE_DISTANCE) {
+        swipe = null;
+        if (e.cancelable) e.preventDefault();
+        // 左へ払うと次のページ、右へ払うと前のページ(画面下の◀▶と同じ向き)
+        changePage(dx < 0 ? 1 : -1);
+      }
+    };
+
+    const onTouchEnd = () => { swipe = null; };
+
+    // capture フェーズで受け取り、キャンバス(fabric.js)より先に判定する
+    const opts = { capture: true, passive: false };
+    scrollEl.addEventListener('touchstart', onTouchStart, opts);
+    scrollEl.addEventListener('touchmove', onTouchMove, opts);
+    scrollEl.addEventListener('touchend', onTouchEnd, opts);
+    scrollEl.addEventListener('touchcancel', onTouchEnd, opts);
+    return () => {
+      scrollEl.removeEventListener('touchstart', onTouchStart, opts);
+      scrollEl.removeEventListener('touchmove', onTouchMove, opts);
+      scrollEl.removeEventListener('touchend', onTouchEnd, opts);
+      scrollEl.removeEventListener('touchcancel', onTouchEnd, opts);
+    };
+  }, [currentTextbookId, mode, changePage]);
+
   // ==========================================
   // レンダリング
   // ==========================================
@@ -2605,7 +2704,7 @@ export default function App() {
               スクロール領域内のラッパーへ「拡大後の実サイズ」を明示的に与える
               (transform だけではレイアウト上のサイズが変わらず、端が見切れてしまうため)
             */}
-            <div className="absolute inset-0 overflow-auto flex" onClick={closeAllMenus}>
+            <div ref={canvasScrollRef} className="absolute inset-0 overflow-auto flex" onClick={closeAllMenus}>
               <div className="m-auto p-3">
                 {/*
                   半ページ表示: キャンバス自体は常にページ全体を保持したまま、
@@ -2837,6 +2936,21 @@ export default function App() {
                   <kbd className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded-lg font-mono font-bold text-xs">Del / BS</kbd>
                 </div>
               </div>
+              {/* スマホ・タブレットでの「ページ送り」操作の案内 */}
+              <div className="mt-6 bg-sky-50/70 border border-sky-200 rounded-xl p-4">
+                <div className="font-bold text-sm text-slate-700 mb-2 flex items-center gap-1.5">
+                  <MousePointer2 size={16} className="text-sky-500" /> スマホ・タブレットで「ページ送り」
+                </div>
+                <ul className="text-xs font-bold text-slate-500 leading-relaxed list-disc pl-5 space-y-0.5">
+                  <li>選択モードのとき、教科書の上を左へスワイプで次のページ</li>
+                  <li>同じく、右へスワイプで前のページ</li>
+                </ul>
+                <p className="text-[11px] font-bold text-slate-400 mt-2 leading-relaxed">
+                  えんぴつなどの書き込み中は、書き込みを優先するためスワイプでのページ送りは働きません。
+                  拡大して画面からはみ出しているときも、スクロールを優先します。
+                </p>
+              </div>
+
               {/* スマホ・タブレットでの「戻る」操作の案内 */}
               <div className="mt-6 bg-amber-50/70 border border-amber-200 rounded-xl p-4">
                 <div className="font-bold text-sm text-slate-700 mb-2 flex items-center gap-1.5">
