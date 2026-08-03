@@ -35,6 +35,13 @@ const BACKUP_VERSION = 1;
 //   ・ビルド時の環境変数  VITE_GOOGLE_CLIENT_ID  を設定するか
 //   ・下の "" の中に直接クライアントIDを貼り付けてください
 // 未設定の場合でもアプリは通常どおり動作し、同期パネルのみ非表示になります。
+//
+// ⚠️ この「クライアントID」は秘密の鍵ではない。
+//    OAuth の Web クライアントIDは、どのみちブラウザの通信に出てくる公開の識別子で、
+//    これを知られてもデータは読めない。なりすましを防いでいるのは
+//    Google Cloud 側の「承認済みの JavaScript 生成元」の設定であって、この値の秘匿ではない。
+//    そのため公開先ドメインを Google Cloud に必ず登録すること（GOOGLE_DRIVE_SETUP.md 参照）。
+//    一方で「クライアントシークレット」は本物の鍵なので、この値の隣に置かないこと。
 // ==========================================
 const GOOGLE_CLIENT_ID =
   (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_GOOGLE_CLIENT_ID) || "521749104068-2455o6p38or3tnerqjmllsjrnoc4kqq3.apps.googleusercontent.com";
