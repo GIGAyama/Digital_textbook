@@ -2635,8 +2635,19 @@ export default function App() {
               {textbooks.map(tb => (
                 <div key={tb.id} onClick={() => { setCurrentTextbookId(tb.id); setCurrentPage(pageHistory[tb.id] || 0); setZoom(1); }} className="bg-white rounded-3xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group relative overflow-hidden flex flex-col border border-slate-100 min-h-[260px]">
                   <div className="h-44 bg-slate-100 relative border-b border-slate-100 flex items-center justify-center p-3 overflow-hidden">
-                    <img src={tb.coverImage} alt={tb.title} className="max-h-full max-w-full object-contain drop-shadow-md group-hover:scale-105 transition-transform duration-300" />
-                    <button onClick={(e) => deleteTextbook(tb.id, e)} className="absolute top-3 right-3 bg-white/90 backdrop-blur hover:bg-red-50 text-slate-400 hover:text-red-500 p-2.5 rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-md"><Trash2 size={20} /></button>
+                    {/* width/height を書いておかないと、表紙が出た瞬間に
+                        カードの高さが変わって一覧全体がガタつく（CLS）。
+                        実際の表示サイズは CSS 側で決まるので、ここは比率の指定として効く。 */}
+                    <img
+                      src={tb.coverImage}
+                      alt={`${tb.title} の表紙`}
+                      width="176"
+                      height="176"
+                      loading="lazy"
+                      decoding="async"
+                      className="max-h-full max-w-full object-contain drop-shadow-md group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <button onClick={(e) => deleteTextbook(tb.id, e)} aria-label={`「${tb.title}」を消す`} className="absolute top-3 right-3 bg-white/90 backdrop-blur hover:bg-red-50 text-slate-500 hover:text-red-600 p-2.5 rounded-full opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all shadow-md"><Trash2 size={20} /></button>
                   </div>
                   <div className="p-5 bg-white flex-grow flex flex-col justify-between"><h3 className="font-bold text-slate-800 line-clamp-2 text-base leading-snug">{tb.title}</h3><div className="text-sm text-slate-400 font-bold mt-3 flex items-center gap-1.5"><BookOpen size={16} /> {tb.pages.length} ページ</div></div>
                 </div>
