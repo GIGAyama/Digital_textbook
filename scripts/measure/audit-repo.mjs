@@ -110,7 +110,7 @@ const report = {
         CSP: entryText ? /Content-Security-Policy/.test(entryText) : null,
         localStorage_clear: (uiText.match(/localStorage\s*\.\s*clear\s*\(/g) || []).length,
         postMessage_wildcard: (uiText.match(/postMessage\s*\([\s\S]{0,300}?,\s*['"]\*['"]\s*\)/g) || []).length,
-        外部スクリプト: [...new Set((uiText.match(/https:\/\/(cdn|unpkg|cdnjs)[a-z0-9.\-]*/gi) || []))],
+        外部スクリプト: [...new Set((uiText.match(/https:\/\/(cdn|unpkg|cdnjs)[a-z0-9.-]*/gi) || []))],
         oauthスコープ: (() => {
             const a = read('appsscript.json');
             if (!a) return null;

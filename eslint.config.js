@@ -64,7 +64,23 @@ export default [
         },
     },
     {
+        // 実測用の道具は、ブラウザの中で走らせる関数を文字列として持つ。
+        // page.evaluate() に渡す中身なので document / window は存在する。
+        files: ['scripts/measure/**/*.{js,mjs}'],
+        languageOptions: {
+            ecmaVersion: 2022,
+            sourceType: 'module',
+            globals: { ...globals.node, ...globals.browser },
+        },
+        rules: {
+            ...js.configs.recommended.rules,
+            'no-unused-vars': ['error', { args: 'none', caughtErrors: 'none', varsIgnorePattern: '^probeA11y$' }],
+            'no-empty': 'off',
+        },
+    },
+    {
         files: ['scripts/**/*.mjs', 'eslint.config.js', '*.config.js'],
+        ignores: ['scripts/measure/**'],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'module',
