@@ -558,7 +558,8 @@ button rt, .badge rt, .nav-link rt, [class*="bg-"] rt, [class*="btn"] rt { color
 ## 次にやること（第1群の残り）
 
 - **`Haiku-meeting`（C型）は重い。** 実測すると次の状態だった。
-  - **`<meta name="viewport">` が無い**（スマホ・タブレットで 980px 幅として描画される）
+  - **viewport が `maximum-scale=1.0, user-scalable=no`**（`code.gs` の `addMetaTag` で
+    指定されている。見えづらい子が拡大できない）。`index.html` 側には指定が無い
   - Tailwind を `cdn.tailwindcss.com` から読んでいる（本番利用は非推奨の版。
     ブラウザ内で CSS を生成する）
   - React / ReactDOM / **Babel standalone** を unpkg から読み、
