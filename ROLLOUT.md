@@ -8,6 +8,7 @@
 | Townmap_Mikke | C+ | ✅ | ✅ | — | 🔜 | — | 第1群。docs/ のみ。**sw.js が他アプリのキャッシュを全削除していた問題を修正**。GAS 本体は scriptId 待ち。CSP は手順書として添付 |
 | Reflection_Journal | C+ | ✅ | ✅ | ✅ | 🔜 | — | 第1群。docs/ のみ。**同じ sw.js の不具合**＋maskable がセーフゾーンの 91.64% を侵していた問題を修正。GAS 本体は scriptId 待ち |
 | Homework_barcordreader | B | ✅ | ✅ | ✅ | ✅ | ✅ | 第1群。**完了・マージ済み**（#19 / #28）。コントラスト63→0件、タップ42→0件、画像 493→100KB、offline.html、更新通知、CSP |
+| PhysicalEducation_note | C | ✅ | ✅ | — | ✅ | — | 第1群。**ふりがなが青いボタンの上で比 1.28**（低学年ほど読めない）。Bootstrap 既定色 4件も基準未満。CDN 4本に SRI＋版固定。OAuth スコープは提案のみ（PR #1・未マージ） |
 
 ## Digital_textbook でやったこと
 
@@ -392,6 +393,92 @@ Digital_textbook では pdf.js などを自己ホストに寄せた。あれは*
 スコープの粒度が粗く、実際に通るかは**デプロイして確かめないと分からない。**
 
 → **直さずに AUDIT.md へ書き、PR で提案するだけにする。マージしない。**
+
+### 29. Bootstrap の既定色は、4つとも基準に届いていない
+
+体育ノートで出たのは**このアプリ固有の配色ではなく、Bootstrap 5.3 の既定色**だった。
+白地・14px での実測。
+
+| クラス | 色 | 比 |
+|---|---|---:|
+| `.text-primary` | `#0d6efd` | 4.27 |
+| `.text-danger` | `#dc3545` | 4.30 |
+| `.text-secondary` | `#6c757d` | 4.45 |
+| `.btn-outline-info` | `#0dcaf0` | **1.96** |
+
+**Bootstrap を使っているリポジトリでは、まったく同じ4件が出るはず。**
+個別に直すより、この上書きを丸ごと持っていくほうが速い。
+
+```css
+:root {
+  --bs-primary-text-emphasis: #0a58ca;
+  --bs-danger-text-emphasis: #b02a37;
+  --bs-info-text-emphasis: #087990;
+}
+.text-primary { color: #0a58ca !important; }
+.text-danger { color: #b02a37 !important; }
+.text-secondary { color: #5c636a !important; }
+.btn-outline-info { --bs-btn-color: #087990; --bs-btn-border-color: #087990; }
+```
+
+`Google Blue #1a73e8` を主色にしているアプリも要注意。**4.27 で、
+白抜き文字を載せたときも 4.27。表にも裏にも届いていない。**
+`#1967d2`（Blue 700）に1段濃くすると両方 5.0 になる。
+
+### 30. ふりがな（`rt`）の色を決め打ちすると、低学年ほど読めなくなる
+
+体育ノートは `rt { color: #666 }` としていた。
+そのため**青いボタンの上に置いたふりがなが濃い灰色のまま重なり、比 1.28**。
+
+ふりがなが要るのは低学年の児童なので、
+**いちばん読めなくて困る人がいちばん読めない**形になっていた。
+
+```css
+.btn rt, .badge rt, .nav-link rt, [class*="bg-primary"] rt { color: inherit; }
+```
+
+**`<ruby>` を使っているアプリは全部見ること。** この一群には多い。
+
+### 31. `viewport-fit=cover` は、GAS では2か所直さないと効かない
+
+GAS は画面を iframe で包む。`index.html` の `<meta>` だけ直しても、
+外枠側が古いままで安全領域が使えるようにならない。
+
+```js
+// code.gs の doGet でも同じものを指定する
+.addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover')
+```
+
+### 32. SRI は「付けた」だけでは意味がない。版の固定とセット
+
+体育ノートは CDN を4本、SRI 無しで読んでいた。**うち2本は版も浮いていた。**
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>   <!-- 版が浮いている -->
+```
+
+版が浮いていると SRI を付けられない（中身が変わるため）。
+そのうえ**メジャー版が上がると勝手に追随し、ある日突然壊れる。**
+ファイルを明示して版を固定してから、ハッシュを付ける。
+
+ハッシュは**記憶で書かない。** npm から同じ版を取って実バイトから計算する。
+間違えると、そのファイルは読み込まれず**アプリが起動しなくなる**。
+
+```bash
+npm pack bootstrap@5.3.0
+openssl dgst -sha384 -binary package/dist/css/bootstrap.min.css | openssl base64 -A
+```
+
+効いていることの確かめ方は「ミラー上のファイルに1バイト足す」。
+弾かれると、スタイルシートの枚数が減り、`Failed to find a valid digest` が出る。
+**SRI の失敗は `requestfailed` に出ない**（要求は成功し、検査だけが落ちるため）。
+読み込み失敗の一覧だけ見ていると、効いていなくても気づけない。
+
+### 33. ミラーには CORS ヘッダーが要る
+
+`crossorigin="anonymous"` を付けた資産は、CORS 応答でないとブラウザが弾く。
+ローカルの控えを `python3 -m http.server` で出すと**ハッシュが正しくても全部失敗する**。
+`Access-Control-Allow-Origin: *` を返す小さなサーバーにすること。
 
 ## 次に着手するときに人間が決めること（未決）
 
