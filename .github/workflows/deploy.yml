@@ -29,7 +29,9 @@ jobs:
       - name: Audit dependencies
         run: npm audit --audit-level=high || true
 
-      # GIGA Standard v4 Part I の検査。落ちたら公開しない。
+      # GIGA Standard v4 Part I の検査（ESLint を含む）。落ちたら公開しない。
+      # ESLint の no-undef は、App.jsx を複数ファイルへ分けたときの
+      # import 忘れを捕まえる。ビルドは通ってしまうので、ここで止める。
       # 検査に落ちたときは、検査をゆるめるのではなく quality.config.json に
       # 理由を書いて明示的に許可すること。
       - name: Quality gate

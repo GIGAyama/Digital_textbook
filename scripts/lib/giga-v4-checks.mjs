@@ -153,7 +153,8 @@ export function runGigaV4Checks(rootDir, config) {
             }
             // script-src を 'self' で締めているのにインライン script があると動かない
             const inline = [...html.matchAll(/<script\b(?![^>]*\bsrc=)[^>]*>/gi)];
-            if (inline.length > 0 && !/'unsafe-inline'/.test((content.match(/script-src\s+([^;]*)/) || [, ''])[1])) {
+            const scriptSrc = (content.match(/script-src\s+([^;]*)/) || ['', ''])[1];
+            if (inline.length > 0 && !/'unsafe-inline'/.test(scriptSrc)) {
                 issues.push(issue('error', 'CSP_INLINE_SCRIPT',
                     `インライン <script> が ${inline.length} 個あるが script-src が許可していない。外部ファイルへ切り出すこと。`,
                     entryHtml));
