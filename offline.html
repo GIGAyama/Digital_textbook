@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#f59e0b" />
+  <meta name="color-scheme" content="light" />
+  <title>インターネットにつながっていません｜デジタル教科書メーカー</title>
+  <link rel="icon" type="image/png" href="./favicon.png" />
+  <style>
+    /* アプリ本体と同じ配色・同じ丸ゴシックにして、「壊れた」と思わせない。
+       このページは圏外でも表示できる必要があるので、外部ファイルを一切
+       読み込まず、フォントも端末に入っているものだけで組む。 */
+    :root {
+      --amber: #f59e0b;
+      --amber-d: #a75d05;
+      --amber-s: #fffbeb;
+      --ink: #1e293b;
+      --muted: #475569;
+      --safe-t: env(safe-area-inset-top, 0px);
+      --safe-b: env(safe-area-inset-bottom, 0px);
+      --safe-l: env(safe-area-inset-left, 0px);
+      --safe-r: env(safe-area-inset-right, 0px);
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html {
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      /* 古い端末向けフォールバック */
+      min-height: 100dvh;
+      padding: calc(24px + var(--safe-t)) calc(20px + var(--safe-r)) calc(24px + var(--safe-b)) calc(20px + var(--safe-l));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--amber-s);
+      color: var(--ink);
+      font-family: 'Zen Maru Gothic', 'Hiragino Maru Gothic ProN', 'BIZ UDGothic',
+        'Hiragino Kaku Gothic ProN', 'Noto Sans JP', system-ui, sans-serif;
+      font-size: clamp(15px, 1.6vw + 10px, 18px);
+      line-height: 1.8;
+    }
+
+    .card {
+      background: #fff;
+      border: 2px solid #fde68a;
+      border-radius: 24px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, .08);
+      padding: clamp(24px, 5vw, 40px);
+      max-width: 34rem;
+      width: 100%;
+      text-align: center;
+    }
+
+    .mark {
+      font-size: clamp(48px, 12vw, 72px);
+      line-height: 1;
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      font-size: clamp(20px, 3vw + 12px, 30px);
+      margin: 0 0 12px;
+      color: var(--ink);
+    }
+
+    p {
+      margin: 0 0 8px;
+      color: var(--muted);
+    }
+
+    .hint {
+      margin-top: 20px;
+      padding: 14px 16px;
+      background: var(--amber-s);
+      border-radius: 14px;
+      text-align: left;
+      font-size: .92em;
+      color: var(--amber-d);
+    }
+
+    .hint ul {
+      margin: 8px 0 0;
+      padding-left: 1.2em;
+    }
+
+    button {
+      margin-top: 24px;
+      min-width: 44px;
+      min-height: 56px;
+      padding: 0 32px;
+      font: inherit;
+      font-weight: 700;
+      color: #fff;
+      background: var(--amber);
+      border: none;
+      border-radius: 16px;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: background-color .15s;
+    }
+
+    button:hover {
+      background: #d97706;
+    }
+
+    button:focus-visible {
+      outline: 3px solid var(--amber-d);
+      outline-offset: 2px;
+    }
+
+    @media (forced-colors: active) {
+      button {
+        border: 2px solid ButtonText;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+
+      *,
+      *::before,
+      *::after {
+        animation-duration: .01ms !important;
+        transition-duration: .01ms !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="card">
+    <div class="mark" aria-hidden="true">📡</div>
+    <h1>いま インターネットに つながっていません</h1>
+    <p>でも、だいじょうぶ。</p>
+    <p>これまでに 書きこんだ ものは、この たんまつの なかに のこっています。</p>
+
+    <button type="button" onclick="location.reload()">もういちど ためす</button>
+
+    <div class="hint">
+      <strong>つながらない ときは</strong>
+      <ul>
+        <li>Wi-Fi が オンに なっているか たしかめる</li>
+        <li>きかいを いちど とじて、ひらきなおす</li>
+        <li>それでも だめなら、せんせいに つたえる</li>
+      </ul>
+    </div>
+  </main>
+</body>
+
+</html>
