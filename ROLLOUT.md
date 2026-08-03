@@ -6,6 +6,7 @@
 |---|---|:--:|:--:|:--:|:--:|:--:|---|
 | Digital_textbook | B | ✅ | ✅ | ✅ | ✅ | ✅ | 第3群。CDN自己ホスト化＋CSP、コントラスト0件、maskable 修正、ESLint 導入まで実施 |
 | Townmap_Mikke | C+ | ✅ | ✅ | — | 🔜 | — | 第1群。docs/ のみ。**sw.js が他アプリのキャッシュを全削除していた問題を修正**。GAS 本体は scriptId 待ち。CSP は手順書として添付 |
+| Reflection_Journal | C+ | ✅ | ✅ | ✅ | 🔜 | — | 第1群。docs/ のみ。**同じ sw.js の不具合**＋maskable がセーフゾーンの 91.64% を侵していた問題を修正。GAS 本体は scriptId 待ち |
 
 ## Digital_textbook でやったこと
 
@@ -189,6 +190,36 @@ GIS サインインも `accounts.google.com` を script / frame / connect の
 
 「`id` 変更は停止条件」と身構えがちだが、**変えているのは表記だけで
 同一性は不変**というケースが大半。判断の根拠を PR に書けば止まらずに済む。
+
+### 16. `sw.js` の不具合はテンプレート由来。1件ずつ回すより先に一括で洗う
+
+`Townmap_Mikke` と `Reflection_Journal` は、**まったく同じ形の
+`caches.keys()` 全削除**を持っていた。コメントの書き方まで似ており、
+同じシェルのテンプレートから複製されたことが明らかだった。
+
+つまりこれは「そのリポジトリの不具合」ではなく「**テンプレートの不具合が
+横展開されたもの**」で、C+型の他のリポジトリも同じ状態である可能性が高い。
+
+**1件ずつ P0〜P4 を回すより、まずこの1点だけを全リポジトリで洗うほうが
+被害の止まり方が速い。** 判定は1行で済む。
+
+```bash
+grep -n "caches.keys()" $(git ls-files '*sw.js')
+```
+
+修正も定型で、`CACHE_NAME` を `CACHE_PREFIX + APP_VERSION` に分け、
+`activate` のフィルタに `k.startsWith(CACHE_PREFIX) &&` を足すだけ。
+検証も同じスクリプトが使い回せる。
+
+### 17. `purpose:"maskable"` に通常アイコンを流用しているケースが多い
+
+`Reflection_Journal` は `icon-512.png`（角丸アイコン）を `any` と
+`maskable` の両方に指定していた。セーフゾーン外の **91.64%** が絵柄で、
+Android が円で切り抜くと大きく欠ける。
+
+manifest を目で見るだけでは気づけない（`src` が同じファイルなだけ）。
+**画素を数えること。** 判定は Digital_textbook の
+`scripts/make-maskable.mjs` の検査部分がそのまま使える。
 
 ## 次に着手するときに人間が決めること（未決）
 
