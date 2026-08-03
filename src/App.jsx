@@ -611,11 +611,11 @@ const Header = ({ onGoHome, title }) => (
   <nav className="bg-white border-b-4 border-amber-500 px-3 sm:px-6 py-1.5 sm:py-2.5 flex justify-between items-center shadow-sm z-20 shrink-0">
     <div className="flex items-center gap-2 sm:gap-3 min-w-0">
       {onGoHome ? (
-        <button onClick={onGoHome} className="flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-amber-600 bg-slate-100 hover:bg-amber-50 px-2 sm:px-3 py-1.5 rounded-xl transition-all active:scale-95 shrink-0">
+        <button onClick={onGoHome} className="flex items-center gap-1 text-sm font-bold text-slate-600 hover:text-amber-700 bg-slate-100 hover:bg-amber-50 px-2 sm:px-3 py-1.5 rounded-xl transition-all active:scale-95 shrink-0">
           <ChevronLeft size={18} /> <span className="hidden sm:inline">一覧へ戻る</span>
         </button>
       ) : (
-        <div className="bg-amber-100 p-2 rounded-xl text-amber-600 shadow-inner shrink-0"><Book size={22} /></div>
+        <div className="bg-amber-100 p-2 rounded-xl text-amber-700 shadow-inner shrink-0"><Book size={22} /></div>
       )}
       <h1 className="text-base sm:text-xl font-bold text-slate-800 tracking-tight line-clamp-1">{title || APP_NAME}</h1>
     </div>
@@ -654,10 +654,10 @@ const TimerPanel = ({ onClose }) => {
     <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-md border border-slate-200 rounded-2xl shadow-xl z-50 p-4 w-64 animate-in fade-in slide-in-from-top-4">
       <div className="flex justify-between items-center mb-4">
         <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner">
-          <button onClick={() => setTab('timer')} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${tab === 'timer' ? 'bg-white shadow-sm text-amber-600' : 'text-slate-500 hover:text-slate-700'}`}>タイマー</button>
-          <button onClick={() => setTab('stopwatch')} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${tab === 'stopwatch' ? 'bg-white shadow-sm text-amber-600' : 'text-slate-500 hover:text-slate-700'}`}>ウォッチ</button>
+          <button onClick={() => setTab('timer')} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${tab === 'timer' ? 'bg-white shadow-sm text-amber-700' : 'text-slate-600 hover:text-slate-800'}`}>タイマー</button>
+          <button onClick={() => setTab('stopwatch')} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${tab === 'stopwatch' ? 'bg-white shadow-sm text-amber-700' : 'text-slate-600 hover:text-slate-800'}`}>ウォッチ</button>
         </div>
-        <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"><X size={18}/></button>
+        <button onClick={onClose} className="p-1.5 text-slate-600 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"><X size={18}/></button>
       </div>
       
       <div className={`text-4xl font-mono text-center font-bold mb-4 p-4 rounded-xl border-2 transition-colors ${tab === 'timer' && timeLeft === 0 ? 'bg-red-50 text-red-500 border-red-200 animate-pulse shadow-inner' : 'bg-slate-50 text-slate-800 border-slate-200 shadow-inner'}`}>
@@ -676,7 +676,7 @@ const TimerPanel = ({ onClose }) => {
         </div>
       )}
 
-      <button onClick={() => tab === 'timer' ? setIsTimerRunning(!isTimerRunning) : setIsSwRunning(!isSwRunning)} className={`w-full py-2.5 rounded-xl font-bold text-white flex justify-center items-center gap-2 transition-all active:scale-95 shadow-md ${isRunning ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-500 hover:bg-blue-600'}`}>
+      <button onClick={() => tab === 'timer' ? setIsTimerRunning(!isTimerRunning) : setIsSwRunning(!isSwRunning)} className={`w-full py-2.5 rounded-xl font-bold text-white flex justify-center items-center gap-2 transition-all active:scale-95 shadow-md ${isRunning ? 'bg-amber-700 hover:bg-amber-800' : 'bg-blue-600 hover:bg-blue-700'}`}>
         {isRunning ? <><Pause size={18}/> ストップ</> : <><Play size={18}/> スタート</>}
       </button>
     </div>
@@ -2492,7 +2492,7 @@ export default function App() {
   }
 
   if (!scriptsLoaded || !isDataLoaded) {
-    return <div className="h-dvh w-full flex items-center justify-center bg-amber-50/40"><div className="flex flex-col items-center gap-4 text-amber-600"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-amber-500"></div><div className="text-xl font-bold animate-pulse">システムを準備中...</div></div></div>;
+    return <div className="h-dvh w-full flex items-center justify-center bg-amber-50/40"><div className="flex flex-col items-center gap-4 text-amber-700"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-amber-500"></div><div className="text-xl font-bold animate-pulse">システムを準備中...</div></div></div>;
   }
 
   // 全画面表示中はヘッダー・ツールバー・フッターを隠して学習領域を最大化する
@@ -2536,7 +2536,7 @@ export default function App() {
                   onClick={() => importFileInputRef.current && importFileInputRef.current.click()}
                   disabled={isProcessing}
                   title="Googleドライブ等から取得したバックアップJSONを読み込みます"
-                  className="flex items-center gap-1.5 bg-white border-2 border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50 text-emerald-600 font-bold px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="flex items-center gap-1.5 bg-white border-2 border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50 text-emerald-700 font-bold px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <Upload size={16} />
                   バックアップを取り込む
@@ -2560,10 +2560,10 @@ export default function App() {
                       <div className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
                         Googleドライブ同期
                         {driveConnected && (
-                          <span className="inline-flex items-center gap-0.5 text-[11px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full"><Check size={11} /> 接続中</span>
+                          <span className="inline-flex items-center gap-0.5 text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full"><Check size={11} /> 接続中</span>
                         )}
                       </div>
-                      <div className="text-[11px] font-bold text-slate-400">
+                      <div className="text-[11px] font-bold text-slate-600">
                         {driveLastSync ? `最終保存: ${driveLastSync}` : '別の端末でも同じGoogleアカウントで接続すれば同期できます'}
                       </div>
                     </div>
@@ -2573,7 +2573,7 @@ export default function App() {
                       <button
                         onClick={handleDriveConnect}
                         disabled={driveBusy !== null}
-                        className="flex items-center gap-1.5 bg-sky-500 hover:bg-sky-600 text-white font-bold px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="flex items-center gap-1.5 bg-sky-700 hover:bg-sky-800 text-white font-bold px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         {driveBusy === 'connecting' ? <Loader2 size={16} className="animate-spin" /> : <Cloud size={16} />}
                         Googleドライブに接続
@@ -2584,7 +2584,7 @@ export default function App() {
                           onClick={handleDriveSave}
                           disabled={driveBusy !== null || textbooks.length === 0}
                           title="いまのデータをGoogleドライブに保存します"
-                          className="flex items-center gap-1.5 bg-sky-500 hover:bg-sky-600 text-white font-bold px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                          className="flex items-center gap-1.5 bg-sky-700 hover:bg-sky-800 text-white font-bold px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                           {driveBusy === 'saving' ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
                           ドライブに保存
@@ -2602,7 +2602,7 @@ export default function App() {
                           onClick={handleDriveDisconnect}
                           disabled={driveBusy !== null}
                           title="接続を解除します"
-                          className="flex items-center gap-1 text-slate-400 hover:text-red-500 hover:bg-red-50 font-bold px-2.5 py-2 rounded-xl transition-all active:scale-95 text-xs disabled:opacity-40"
+                          className="flex items-center gap-1 text-slate-600 hover:text-red-500 hover:bg-red-50 font-bold px-2.5 py-2 rounded-xl transition-all active:scale-95 text-xs disabled:opacity-40"
                         >
                           <X size={14} /> 切断
                         </button>
@@ -2649,7 +2649,7 @@ export default function App() {
                     />
                     <button onClick={(e) => deleteTextbook(tb.id, e)} aria-label={`「${tb.title}」を消す`} className="absolute top-3 right-3 bg-white/90 backdrop-blur hover:bg-red-50 text-slate-500 hover:text-red-600 p-2.5 rounded-full opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all shadow-md"><Trash2 size={20} /></button>
                   </div>
-                  <div className="p-5 bg-white flex-grow flex flex-col justify-between"><h3 className="font-bold text-slate-800 line-clamp-2 text-base leading-snug">{tb.title}</h3><div className="text-sm text-slate-400 font-bold mt-3 flex items-center gap-1.5"><BookOpen size={16} /> {tb.pages.length} ページ</div></div>
+                  <div className="p-5 bg-white flex-grow flex flex-col justify-between"><h3 className="font-bold text-slate-800 line-clamp-2 text-base leading-snug">{tb.title}</h3><div className="text-sm text-slate-600 font-bold mt-3 flex items-center gap-1.5"><BookOpen size={16} /> {tb.pages.length} ページ</div></div>
                 </div>
               ))}
             </div>
@@ -2666,14 +2666,14 @@ export default function App() {
               <button
                 onClick={goToLibrary}
                 title="一覧へ戻る"
-                className="flex items-center gap-1 text-sm font-bold text-slate-600 bg-white/90 backdrop-blur border border-slate-200 hover:bg-white hover:text-amber-600 px-2.5 sm:px-3 py-2 rounded-xl shadow-md transition-all active:scale-95"
+                className="flex items-center gap-1 text-sm font-bold text-slate-600 bg-white/90 backdrop-blur border border-slate-200 hover:bg-white hover:text-amber-700 px-2.5 sm:px-3 py-2 rounded-xl shadow-md transition-all active:scale-95"
               >
                 <ChevronLeft size={18} /> <span className="hidden sm:inline">一覧へ戻る</span>
               </button>
               <button
                 onClick={() => { closeAllMenus(); setShowToolbar(true); }}
                 title="ツールを表示"
-                className="flex items-center gap-1.5 text-sm font-bold text-white bg-amber-500 hover:bg-amber-600 px-3 py-2 rounded-xl shadow-md shadow-amber-500/30 transition-all active:scale-95"
+                className="flex items-center gap-1.5 text-sm font-bold text-white bg-amber-700 hover:bg-amber-800 px-3 py-2 rounded-xl shadow-md shadow-amber-800/30 transition-all active:scale-95"
               >
                 <PenTool size={18} /> <span>ツール</span>
               </button>
@@ -2686,7 +2686,7 @@ export default function App() {
             <div className="flex flex-wrap px-1.5 sm:px-4 py-1.5 sm:py-2 gap-y-1.5 gap-x-1.5 sm:gap-x-3 items-center mx-auto justify-center">
 
               {/* 一覧へ戻る */}
-              <button onClick={goToLibrary} title="一覧へ戻る" className="flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-amber-600 bg-slate-100 hover:bg-amber-50 px-2 sm:px-3 py-1.5 rounded-xl transition-all active:scale-95">
+              <button onClick={goToLibrary} title="一覧へ戻る" className="flex items-center gap-1 text-sm font-bold text-slate-600 hover:text-amber-700 bg-slate-100 hover:bg-amber-50 px-2 sm:px-3 py-1.5 rounded-xl transition-all active:scale-95">
                 <ChevronLeft size={18} /> <span className="hidden sm:inline">一覧へ戻る</span>
               </button>
 
@@ -2703,11 +2703,11 @@ export default function App() {
 
               {/* 描画・選択ツール */}
               <div className="flex bg-slate-100 rounded-xl p-1 gap-1 shadow-inner">
-                <button onClick={() => setMode('select')} className={`p-2 rounded-lg transition-all active:scale-95 ${mode === 'select' ? 'bg-white text-amber-600 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-200'}`} title="選択"><MousePointer2 size={20} /></button>
-                <button onClick={() => setMode('pencil')} className={`p-2 rounded-lg transition-all active:scale-95 ${mode === 'pencil' ? 'bg-white text-amber-600 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-200'}`} title="えんぴつ"><Pencil size={20} /></button>
-                <button onClick={() => setMode('highlighter')} className={`p-2 rounded-lg transition-all active:scale-95 ${mode === 'highlighter' ? 'bg-white text-amber-600 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-200'}`} title="マーカー"><Highlighter size={20} /></button>
-                <button onClick={() => setMode('eraser')} className={`p-2 rounded-lg transition-all active:scale-95 ${mode === 'eraser' ? 'bg-white text-amber-600 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-200'}`} title="けしごむ"><Eraser size={20} /></button>
-                <button onClick={() => setMode('qr')} className={`p-2 rounded-lg transition-all active:scale-95 ${mode === 'qr' ? 'bg-white text-amber-600 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-200'}`} title="QRコード読み取り"><QrCode size={20} /></button>
+                <button onClick={() => setMode('select')} className={`p-2 rounded-lg transition-all active:scale-95 ${mode === 'select' ? 'bg-white text-amber-700 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-200'}`} title="選択"><MousePointer2 size={20} /></button>
+                <button onClick={() => setMode('pencil')} className={`p-2 rounded-lg transition-all active:scale-95 ${mode === 'pencil' ? 'bg-white text-amber-700 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-200'}`} title="えんぴつ"><Pencil size={20} /></button>
+                <button onClick={() => setMode('highlighter')} className={`p-2 rounded-lg transition-all active:scale-95 ${mode === 'highlighter' ? 'bg-white text-amber-700 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-200'}`} title="マーカー"><Highlighter size={20} /></button>
+                <button onClick={() => setMode('eraser')} className={`p-2 rounded-lg transition-all active:scale-95 ${mode === 'eraser' ? 'bg-white text-amber-700 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-200'}`} title="けしごむ"><Eraser size={20} /></button>
+                <button onClick={() => setMode('qr')} className={`p-2 rounded-lg transition-all active:scale-95 ${mode === 'qr' ? 'bg-white text-amber-700 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-200'}`} title="QRコード読み取り"><QrCode size={20} /></button>
               </div>
 
               {/* カラーパレット */}
@@ -2728,7 +2728,7 @@ export default function App() {
                   {showShapeMenu && (
                     <div className="absolute top-full mt-2 left-0 bg-white border border-slate-200 p-2 rounded-xl shadow-xl z-50 flex gap-2 animate-in fade-in slide-in-from-top-2">
                       {['rect', 'circle', 'line', 'arrow'].map(m => (
-                        <button key={m} onClick={() => { setMode(m); setShowShapeMenu(false); }} className={`p-2.5 rounded-lg transition-colors ${mode === m ? 'bg-amber-100 text-amber-600' : 'text-slate-600 hover:bg-slate-100'}`}>
+                        <button key={m} onClick={() => { setMode(m); setShowShapeMenu(false); }} className={`p-2.5 rounded-lg transition-colors ${mode === m ? 'bg-amber-100 text-amber-700' : 'text-slate-600 hover:bg-slate-100'}`}>
                           {m === 'rect' && <Square size={20}/>}{m === 'circle' && <Circle size={20}/>}{m === 'line' && <Minus size={20}/>}{m === 'arrow' && <ArrowRight size={20}/>}
                         </button>
                       ))}
@@ -2771,7 +2771,7 @@ export default function App() {
                     <div className="fixed sm:absolute top-auto sm:top-full left-1/2 sm:left-auto -translate-x-1/2 sm:translate-x-0 bottom-4 sm:bottom-auto sm:mt-2 sm:right-0 xl:left-0 xl:right-auto bg-white border border-slate-200 p-4 rounded-2xl shadow-2xl z-50 w-[min(20rem,calc(100vw-1.5rem))] animate-in fade-in slide-in-from-top-2">
                       <div className="flex bg-slate-100 p-1 rounded-xl mb-3 shadow-inner overflow-x-auto hide-scrollbar">
                         {STAMP_CATEGORIES.map(cat => (
-                          <button key={cat.id} onClick={() => setStampTab(cat.id)} className={`flex-shrink-0 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${stampTab === cat.id ? 'bg-white shadow-sm text-amber-600' : 'text-slate-500 hover:text-slate-700'}`}>
+                          <button key={cat.id} onClick={() => setStampTab(cat.id)} className={`flex-shrink-0 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${stampTab === cat.id ? 'bg-white shadow-sm text-amber-700' : 'text-slate-600 hover:text-slate-800'}`}>
                             {cat.name}
                           </button>
                         ))}
@@ -2791,7 +2791,7 @@ export default function App() {
                         ))}
                         {stampTab === 'my' && (
                           <>
-                            <button onClick={() => {setShowStampMenu(false); setShowMyStampCreator(true);}} className="col-span-4 py-3 border-2 border-dashed border-amber-300 rounded-xl text-amber-600 font-bold text-sm hover:bg-amber-50 flex items-center justify-center gap-1 mb-2 transition-colors">
+                            <button onClick={() => {setShowStampMenu(false); setShowMyStampCreator(true);}} className="col-span-4 py-3 border-2 border-dashed border-amber-300 rounded-xl text-amber-700 font-bold text-sm hover:bg-amber-50 flex items-center justify-center gap-1 mb-2 transition-colors">
                               <Plus size={16}/> 新しいスタンプを作る
                             </button>
                             {myStamps.map((stamp, idx) => (
@@ -2823,7 +2823,7 @@ export default function App() {
                       <span className="flex items-center gap-2"><BookOpen size={16} className="text-amber-500"/> ページ全体を表示</span>
                       {viewMode === 'full' && <Check size={16} className="text-amber-500 shrink-0"/>}
                     </button>
-                    <div className="text-[10px] font-bold text-slate-400 px-2 pt-1">半ページ表示 (縦向きの画面におすすめ)</div>
+                    <div className="text-[10px] font-bold text-slate-600 px-2 pt-1">半ページ表示 (縦向きの画面におすすめ)</div>
                     <button onClick={() => selectViewMode('half', 'ltr')} className="flex items-center justify-between gap-2 p-2.5 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 transition-colors text-left">
                       <span className="flex items-center gap-2"><Columns size={16} className="text-blue-500"/> 左半分から読む</span>
                       {viewMode === 'half' && halfOrder === 'ltr' && <Check size={16} className="text-amber-500 shrink-0"/>}
@@ -2851,14 +2851,14 @@ export default function App() {
               <div className="w-px h-8 bg-slate-300 rounded-full hidden lg:block"></div>
 
               {/* 共有ボタン */}
-              <button onClick={startHosting} title="共有する" className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-bold px-2.5 sm:px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-md shadow-emerald-500/30">
+              <button onClick={startHosting} title="共有する" className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-800 hover:to-teal-800 text-white font-bold px-2.5 sm:px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-md shadow-emerald-800/30">
                 <Share2 size={16} /> <span className="hidden md:inline">共有する</span>
               </button>
 
               <div className="w-px h-8 bg-slate-300 rounded-full hidden lg:block"></div>
 
               {/* ショートカットヘルプ */}
-              <button onClick={() => setShowShortcuts(true)} className="flex items-center justify-center p-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-slate-700 rounded-xl transition-all active:scale-95 shadow-sm" title="ショートカットキー (?)">
+              <button onClick={() => setShowShortcuts(true)} className="flex items-center justify-center p-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-slate-800 rounded-xl transition-all active:scale-95 shadow-sm" title="ショートカットキー (?)">
                 <Info size={18} />
               </button>
 
@@ -2985,9 +2985,9 @@ export default function App() {
               style={{ bottom: 'calc(0.75rem + var(--safe-b))' }}
             >
               <div className="flex flex-col bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
-                <button onClick={() => setZoom(Math.min(3, zoom + 0.2))} aria-label="大きくする" className="p-2.5 sm:p-3 text-slate-600 hover:bg-slate-50 hover:text-amber-600 transition-colors border-b border-slate-100"><ZoomIn size={20} /></button>
+                <button onClick={() => setZoom(Math.min(3, zoom + 0.2))} aria-label="大きくする" className="p-2.5 sm:p-3 text-slate-600 hover:bg-slate-50 hover:text-amber-700 transition-colors border-b border-slate-100"><ZoomIn size={20} /></button>
                 <div className="py-1 text-center font-bold text-xs text-slate-500 bg-slate-50" aria-live="polite">{Math.round(zoom * 100)}%</div>
-                <button onClick={() => setZoom(Math.max(0.5, zoom - 0.2))} aria-label="小さくする" className="p-2.5 sm:p-3 text-slate-600 hover:bg-slate-50 hover:text-amber-600 transition-colors border-t border-slate-100"><ZoomOut size={20} /></button>
+                <button onClick={() => setZoom(Math.max(0.5, zoom - 0.2))} aria-label="小さくする" className="p-2.5 sm:p-3 text-slate-600 hover:bg-slate-50 hover:text-amber-700 transition-colors border-t border-slate-100"><ZoomOut size={20} /></button>
               </div>
               {/* 提示モード … 電子黒板で一斉授業に使うとき、教室の後ろから読める大きさにする */}
               <button
@@ -3004,7 +3004,7 @@ export default function App() {
                 onClick={handlePrint}
                 title="このページを印刷する"
                 aria-label="このページを印刷する"
-                className="p-3 sm:p-4 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-amber-600 rounded-xl shadow-lg transition-all active:scale-95"
+                className="p-3 sm:p-4 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-amber-700 rounded-xl shadow-lg transition-all active:scale-95"
               >
                 <Printer size={22} />
               </button>
@@ -3022,7 +3022,7 @@ export default function App() {
       {shareMode === 'hosting' && (
         <div role="dialog" aria-modal="true" aria-label="データを共有する" className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[500] p-4 animate-in fade-in">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 md:p-8 text-center animate-in zoom-in-95">
-            <div className="mx-auto bg-emerald-100 text-emerald-600 w-12 h-12 rounded-full flex items-center justify-center mb-3">
+            <div className="mx-auto bg-emerald-100 text-emerald-700 w-12 h-12 rounded-full flex items-center justify-center mb-3">
               <Share2 size={24} />
             </div>
             <h3 className="font-bold text-xl mb-2 text-slate-800">デジタル教科書を共有</h3>
@@ -3042,13 +3042,13 @@ export default function App() {
                   <input type="text" readOnly value={shareUrl} className="flex-1 bg-transparent border-none outline-none text-slate-600 text-xs font-mono px-2" />
                   <button 
                     onClick={() => { navigator.clipboard.writeText(shareUrl); showToast("URLをコピーしました！", "success"); }}
-                    className="p-2 bg-white rounded-lg shadow-sm text-emerald-600 hover:bg-emerald-50 transition-colors flex-shrink-0"
+                    className="p-2 bg-white rounded-lg shadow-sm text-emerald-700 hover:bg-emerald-50 transition-colors flex-shrink-0"
                     title="URLをコピー"
                   >
                     <Copy size={18} />
                   </button>
                 </div>
-                <div className="text-xs font-bold text-emerald-600 bg-emerald-50 py-2 px-4 rounded-full inline-block mb-6 animate-pulse">
+                <div className="text-xs font-bold text-emerald-700 bg-emerald-50 py-2 px-4 rounded-full inline-block mb-6 animate-pulse">
                   {shareStatus}
                 </div>
               </>
@@ -3085,7 +3085,7 @@ export default function App() {
               <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2">
                 <Info className="text-amber-500"/> ショートカットキー
               </h3>
-              <button onClick={() => setShowShortcuts(false)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
+              <button onClick={() => setShowShortcuts(false)} className="p-2 text-slate-600 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
                 <X size={20}/>
               </button>
             </div>
@@ -3153,7 +3153,7 @@ export default function App() {
                   <li>選択モードのとき、教科書の上を左へスワイプで次のページ</li>
                   <li>同じく、右へスワイプで前のページ</li>
                 </ul>
-                <p className="text-[11px] font-bold text-slate-400 mt-2 leading-relaxed">
+                <p className="text-[11px] font-bold text-slate-600 mt-2 leading-relaxed">
                   えんぴつなどの書き込み中は、書き込みを優先するためスワイプでのページ送りは働きません。
                   拡大して画面からはみ出しているときも、スクロールを優先します。
                 </p>
@@ -3168,7 +3168,7 @@ export default function App() {
                   <li>画面下のナビゲーションバーの「戻る」をタップ</li>
                   <li>画面の左右どちらかの端から、中央に向かってスワイプ</li>
                 </ul>
-                <p className="text-[11px] font-bold text-slate-400 mt-2 leading-relaxed">
+                <p className="text-[11px] font-bold text-slate-600 mt-2 leading-relaxed">
                   開いているメニュー → 全画面表示 → 教科書の画面 → 一覧 の順に、1つずつ戻ります。
                   アプリが終了したり、ブラウザで別のページへ移動したりすることはありません。
                 </p>
@@ -3187,7 +3187,7 @@ export default function App() {
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95">
             <div className="p-6 md:p-7 border-b border-slate-100 bg-slate-50">
               <h3 className="font-bold text-xl mb-1 text-slate-800 flex items-center gap-2">
-                <Upload size={20} className="text-emerald-600" /> バックアップを取り込む
+                <Upload size={20} className="text-emerald-700" /> バックアップを取り込む
               </h3>
               <p className="text-xs font-bold text-slate-500 truncate" title={importPreview.fileName}>
                 {importPreview.fileName}
@@ -3202,7 +3202,7 @@ export default function App() {
               </div>
               <p className="text-xs font-bold text-slate-500 leading-relaxed mb-1">取り込み方法を選んでください。</p>
               <ul className="text-xs font-bold text-slate-500 leading-relaxed list-disc pl-5 mb-2">
-                <li><span className="text-emerald-600">追加で取り込む</span>: 今ある教科書はそのまま残ります（推奨）</li>
+                <li><span className="text-emerald-700">追加で取り込む</span>: 今ある教科書はそのまま残ります（推奨）</li>
                 <li><span className="text-red-500">置き換える</span>: 現在のすべての教科書・書き込みが消えます</li>
               </ul>
             </div>
@@ -3230,7 +3230,7 @@ export default function App() {
               <button
                 onClick={() => applyImport('merge')}
                 disabled={isProcessing}
-                className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 font-bold text-white rounded-xl transition-all shadow-md shadow-emerald-500/30 disabled:opacity-40 flex items-center gap-2"
+                className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 font-bold text-white rounded-xl transition-all shadow-md shadow-emerald-800/30 disabled:opacity-40 flex items-center gap-2"
               >
                 {isProcessing ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
                 追加で取り込む
@@ -3274,7 +3274,7 @@ export default function App() {
               </div>
               <div className="flex gap-3 justify-end mt-2">
                 <button type="button" onClick={() => setShowMyStampCreator(false)} className="px-5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 font-bold text-slate-600 rounded-xl transition-all">キャンセル</button>
-                <button type="submit" className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 font-bold text-white rounded-xl transition-all shadow-md shadow-amber-500/30">保存して追加</button>
+                <button type="submit" className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 font-bold text-white rounded-xl transition-all shadow-md shadow-amber-800/30">保存して追加</button>
               </div>
            </form>
         </div>
