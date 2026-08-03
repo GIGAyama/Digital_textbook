@@ -2,6 +2,37 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==========================================================================
+   0. 変数
+   ========================================================================== */
+:root {
+    /* --- セーフエリア（ノッチ・ホームバー・丸角） --- */
+    --safe-t: env(safe-area-inset-top, 0px);
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-l: env(safe-area-inset-left, 0px);
+    --safe-r: env(safe-area-inset-right, 0px);
+
+    /* --- 文字サイズ（画面幅に応じて伸び縮みする）---
+       メディアクエリを何段も書かずに、320px のスマホから 4K の電子黒板まで
+       1本の式でまかなう。 */
+    --fs-body: clamp(15px, 1.6vw + 10px, 18px);
+    --fs-lead: clamp(18px, 2.2vw + 12px, 24px);
+    --fs-title: clamp(22px, 3.2vw + 14px, 40px);
+
+    /* --- 色 ---
+       面に置く色と、文字に使う色は別にする。明るいアンバーをそのまま
+       文字色にすると、Chromebook の安価な液晶ではコントラストが足りず読めない。 */
+    --c-amber: #f59e0b;
+    /* 面・帯用 */
+    --c-amber-d: #a75d05;
+    /* 文字・アイコン用（白背景で 4.5:1 以上） */
+    --c-amber-s: #fffbeb;
+    /* 淡い地 */
+}
+
+/* ==========================================================================
+   1. 土台
+   ========================================================================== */
 html,
 body {
     margin: 0;
@@ -9,10 +40,97 @@ body {
     overscroll-behavior: none;
 }
 
+html {
+    /* 端末の文字サイズ設定で横組みが崩れるのを防ぐ */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
 body {
-    font-family: 'Zen Maru Gothic', 'Hiragino Maru Gothic ProN', 'BIZ UDGothic', sans-serif;
+    font-family: 'Zen Maru Gothic', 'Hiragino Maru Gothic ProN', 'BIZ UDGothic',
+        'Hiragino Kaku Gothic ProN', 'Noto Sans JP', system-ui, sans-serif;
     overflow: hidden;
     -webkit-tap-highlight-color: transparent;
+    font-size: var(--fs-body);
+    /* 児童が読む画面なので行間は広めに取る */
+    line-height: 1.8;
+
+    /* 横向きのときにノッチ側で UI が欠けるのを防ぐ */
+    padding-left: var(--safe-l);
+    padding-right: var(--safe-r);
+    background: #f1f5f9;
+}
+
+/* 児童が字形を学ぶ場面では教科書体を優先する */
+.kanji,
+.kana,
+.formula {
+    font-family: 'UD デジタル 教科書体 NK-R', 'UD Digi Kyokasho NK-R',
+        'UD Digi Kyokasho N-R', 'Zen Maru Gothic', 'Kosugi Maru', sans-serif;
+}
+
+/* ==========================================================================
+   2. 操作
+   ========================================================================== */
+* {
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* 低学年の指でも押せる大きさを下限にする。
+   アイコンだけの小さなボタンが多いので、当たり判定を疑似要素で広げる
+   （見た目は変えずに、押せる範囲だけを 44px まで広げる）。 */
+button,
+a[href],
+[role="button"],
+label.btn-like {
+    touch-action: manipulation;
+    /* ダブルタップズームの300ms遅延を消す */
+    position: relative;
+}
+
+button::after,
+[role="button"]::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%;
+    height: 100%;
+    min-width: 44px;
+    min-height: 44px;
+    /* 当たり判定を広げるだけなので、見た目には一切出さない */
+    pointer-events: auto;
+}
+
+/* 疑似要素で覆うと中身のクリックを奪ってしまう要素は除外する */
+button.no-hit-expand::after,
+[role="button"].no-hit-expand::after {
+    content: none;
+}
+
+/* キーボードで操作している人に、いまどこにいるかを必ず見せる */
+:focus-visible {
+    outline: 3px solid var(--c-amber-d);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* 手書き中に画面そのものが動いてしまわないようにする */
+.canvas-area,
+.canvas-area canvas {
+    touch-action: none;
+}
+
+/* スクロールする箱の中で引っぱり更新が暴発しないようにする */
+.scroll-area,
+.hide-scrollbar {
+    overscroll-behavior: contain;
+}
+
+.no-select {
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .hide-scrollbar::-webkit-scrollbar {
@@ -22,4 +140,218 @@ body {
 .hide-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+}
+
+/* ==========================================================================
+   3. セーフエリア（下端に固定されるもの）
+   ========================================================================== */
+/* iPhone のホームバーにボタンが隠れないよう、その分を足す */
+.safe-bottom {
+    padding-bottom: calc(0.375rem + var(--safe-b));
+}
+
+/* ==========================================================================
+   4. 提示モード（電子黒板・一斉授業）
+   教室のいちばん後ろの席から読めることが要件。
+   教員が「大きく表示」を押すと <body> に .presentation が付く。
+   ========================================================================== */
+body.presentation {
+    font-size: 150%;
+}
+
+body.presentation button,
+body.presentation [role="button"] {
+    min-height: 56px;
+}
+
+body.presentation .toolbar-label {
+    font-size: 1.15em;
+}
+
+/* 提示モードでは個人情報を既定で伏せる。
+   電子黒板に児童名が大写しになる事故を防ぐ。 */
+body.presentation .private-name {
+    filter: blur(6px);
+    user-select: none;
+}
+
+body.presentation .private-name:hover,
+body.presentation .private-name:focus-within {
+    filter: none;
+}
+
+/* 大画面では余白を活かして主役をさらに大きく */
+@media (min-width: 1600px) {
+    :root {
+        --fs-body: clamp(17px, 1.2vw + 10px, 22px);
+    }
+}
+
+/* ==========================================================================
+   5. 動きの配慮（感覚過敏の児童に配慮）
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* ==========================================================================
+   6. ハイコントラストモード
+   背景色が無効化されても「押せる」と分かるようにする
+   ========================================================================== */
+@media (forced-colors: active) {
+
+    button,
+    [role="button"] {
+        border: 2px solid ButtonText;
+    }
+}
+
+/* ==========================================================================
+   7. 更新のお知らせ（src/main.jsx が差し込む帯）
+   ========================================================================== */
+.sw-update-banner {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(16px + var(--safe-b));
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: calc(100vw - 32px);
+    padding: 12px 16px;
+    background: #1e293b;
+    color: #fff;
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .3);
+    font-weight: 700;
+    font-size: .95rem;
+}
+
+.sw-update-banner__text {
+    line-height: 1.5;
+}
+
+.sw-update-banner__apply,
+.sw-update-banner__close {
+    min-height: 44px;
+    padding: 0 16px;
+    border: none;
+    border-radius: 12px;
+    font: inherit;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.sw-update-banner__apply {
+    background: var(--c-amber);
+    color: #1e293b;
+}
+
+.sw-update-banner__close {
+    background: transparent;
+    color: #cbd5e1;
+}
+
+.sw-update-banner__apply:focus-visible,
+.sw-update-banner__close:focus-visible {
+    outline: 3px solid #fff;
+    outline-offset: 2px;
+}
+
+/* ==========================================================================
+   8. 印刷（書き込んだページを紙で配るための本質機能）
+   ========================================================================== */
+@media print {
+    @page {
+        size: A4 portrait;
+        margin: 10mm;
+    }
+
+    html,
+    body {
+        /* 画面では overflow:hidden で1画面に収めているが、
+           印刷では全部のページを流し込む必要があるので解除する */
+        overflow: visible !important;
+        height: auto !important;
+        background: #fff !important;
+        /* 背景色・罫線を紙にも出す（スタンプや枠が消えると意味がない） */
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        font-size: 10.5pt;
+        line-height: 1.5;
+        padding: 0 !important;
+    }
+
+    /* 画面の操作部品は紙に出さない */
+    .no-print,
+    nav,
+    footer,
+    header,
+    button,
+    [role="button"],
+    .sw-update-banner {
+        display: none !important;
+    }
+
+    /* 印刷したい中身だけを紙いっぱいに広げる */
+    .print-target,
+    .print-target * {
+        visibility: visible !important;
+    }
+
+    .print-target {
+        position: absolute !important;
+        inset: 0 !important;
+        width: 100% !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+        display: block !important;
+    }
+
+    .print-target canvas,
+    .print-target img {
+        max-width: 100% !important;
+        height: auto !important;
+        break-inside: avoid;
+    }
+
+    .page-break {
+        break-before: page;
+    }
+
+    table,
+    tr,
+    .card {
+        break-inside: avoid;
+    }
+
+    /* 紙に URL を併記しない（児童のプリントが読みにくくなる） */
+    a[href]::after {
+        content: "";
+    }
+}
+
+/* 横長のページ（見開き・横向きのプリント）は「よこ向き」で刷る。
+   @page は普通のセレクタでは切り替えられないので、名前付きページを使う。 */
+@page yoko {
+    size: A4 landscape;
+    margin: 10mm;
+}
+
+@media print {
+    body.print-landscape .print-target {
+        page: yoko;
+    }
 }

@@ -1,0 +1,61 @@
+name: CI
+
+# deploy.yml は main への push でしか動かないため、そのままだと
+# 品質ゲートが「マージしたあと」にしか回らない。壊れていることに
+# 気づくのが公開の直前になってしまう。
+# ここでは公開はせず、検査とビルドだけを PR の時点で回す。
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - gh-pages
+
+permissions:
+  contents: read
+
+# 同じブランチへ続けて push したときは、古い実行を打ち切る
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      # npm ci は package-lock.json を厳格に解決する。
+      # --legacy-peer-deps で入れた依存はここで必ず落ちるので、
+      # 手元で通っていても油断しないこと。
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high || true
+
+      # ESLint + GIGA Standard v4 Part I の検査。
+      # ESLint の no-undef は、App.jsx を複数ファイルへ分けたときの
+      # import 忘れを捕まえる。ビルドは通ってしまうので、ここで止める。
+      # 落ちたときは、検査をゆるめるのではなく quality.config.json に
+      # 理由を書いて明示的に許可すること。
+      - name: Quality gate
+        run: npm run check
+
+      # 実際にビルドが通るところまで見る（vendor の同期もここで走る）
+      - name: Build
+        run: npm run build
+
+      - name: Report bundle size
+        run: |
+          echo "### ビルド結果" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          du -sh dist >> "$GITHUB_STEP_SUMMARY"
+          ls -lh dist/assets >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

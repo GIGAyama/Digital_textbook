@@ -1,629 +1,38 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { 
-  Pencil, Eraser, Trash2, ChevronLeft, ChevronRight, Smile, Type, 
-  ZoomIn, ZoomOut, MousePointer2, Book, BookOpen, Plus,
+import {
+  Pencil, Eraser, Trash2, ChevronLeft, ChevronRight, Smile, Type,
+  ZoomIn, ZoomOut, MousePointer2, BookOpen, Plus,
   Highlighter, Square, Circle, Minus, ArrowRight,
-  StickyNote, Timer, Play, Pause, RotateCcw,
+  StickyNote, Timer,
   Link as LinkIcon, Volume2, Settings, X,
   Undo2, Redo2, AlertCircle, CheckCircle2, Info, QrCode,
   Share2, Copy, Loader2, Download, Upload, Cloud,
-  Maximize, Minimize, Columns, Check, PenTool, ChevronUp
+  Maximize, Minimize, Columns, Check, PenTool, ChevronUp,
+  Presentation, Printer, Smartphone
 } from 'lucide-react';
 
-// ==========================================
-// 1. 定数・データ定義
-// ==========================================
-
-const APP_NAME = "デジタル教科書メーカー";
-const DEVELOPER_NAME = "GIGA山";
-const SNS_LINK = "https://note.com/cute_borage86";
-
-const DB_KEY_TEXTBOOKS = "digital_textbooks_v3";
-const DB_KEY_DRAWINGS = "digital_textbook_drawings_v3";
-const DB_KEY_MYSTAMPS = "digital_textbook_mystamps";
-const DB_KEY_LAST_OPENED = "digital_textbook_last_opened";
-const DB_KEY_VIEW_MODE = "digital_textbook_view_mode";
-
-const BACKUP_FORMAT = "digital-textbook-backup";
-const BACKUP_VERSION = 1;
-
-// ==========================================
-// Googleドライブ同期の設定
-// Google Cloud で発行した OAuth クライアントID を設定すると、
-// アプリから直接 Googleドライブ にデータを保存・復元できるようになります。
-// 設定方法は「GOOGLE_DRIVE_SETUP.md」を参照してください。
-//   ・ビルド時の環境変数  VITE_GOOGLE_CLIENT_ID  を設定するか
-//   ・下の "" の中に直接クライアントIDを貼り付けてください
-// 未設定の場合でもアプリは通常どおり動作し、同期パネルのみ非表示になります。
-// ==========================================
-const GOOGLE_CLIENT_ID =
-  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_GOOGLE_CLIENT_ID) || "521749104068-2455o6p38or3tnerqjmllsjrnoc4kqq3.apps.googleusercontent.com";
-const GDRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
-const GDRIVE_FILE_NAME = "digital-textbook-backup.json";
-const GIS_SRC = "https://accounts.google.com/gsi/client";
-
-const DB_KEY_DRIVE_FILE_ID = "digital_textbook_drive_file_id";
-const DB_KEY_DRIVE_AUTOSAVE = "digital_textbook_drive_autosave";
-const DB_KEY_DRIVE_LAST_SYNC = "digital_textbook_drive_last_sync";
-
-// スタンプのカテゴリとデータ
-const STAMP_CATEGORIES = [
-  { id: 'eval', name: '評価' },
-  { id: 'jp', name: '国語' },
-  { id: 'math', name: '算数' },
-  { id: 'eng', name: '英語' },
-  { id: 'social', name: '理社' },
-  { id: 'life', name: '生活' },
-  { id: 'my', name: 'マイ' },
-];
-
-const STAMPS_DATA = {
-  'eval': [
-    { label: 'はなまる', type: 'premium', subtype: 'hanamaru' },
-    { label: 'たいへんよくできました', type: 'premium', subtype: 'seal-taihen' },
-    { label: 'よくできました', type: 'premium', subtype: 'seal-yoku' },
-    { label: 'がんばりました', type: 'premium', subtype: 'seal-ganbari' },
-    { label: 'みました', type: 'premium', subtype: 'seal-mimashita' },
-    { label: '合格', type: 'premium', subtype: 'seal-goukaku' },
-    { label: '100点', type: 'premium', subtype: 'hyakuten' },
-    { label: '二重丸', type: 'premium', subtype: 'double-circle' },
-    { label: 'まる', type: 'premium', subtype: 'circle' },
-    { label: 'さんかく', type: 'premium', subtype: 'triangle' },
-    { label: 'チェック', type: 'premium', subtype: 'check' },
-    { label: 'いいね', icon: '👍', color: '#1a73e8', type: 'text' },
-    { label: '見ました', icon: '👀', color: 'green', type: 'text' },
-    { label: 'すごい', icon: '✨', color: '#F1C40F', type: 'text' },
-    { label: 'ナイス', icon: '👏', color: '#E67E22', type: 'text' },
-    { label: '満点', icon: '💯', color: 'red', type: 'text' }
-  ],
-  'jp': [
-    { label: 'いつ', text: 'い\nつ', type: 'vertical', color: 'blue' },
-    { label: 'どこで', text: 'ど\nこ\nで', type: 'vertical', color: 'blue' },
-    { label: 'だれが', text: 'だ\nれ\nが', type: 'vertical', color: 'blue' },
-    { label: 'なにを', text: 'な\nに\nを', type: 'vertical', color: 'blue' },
-    { label: 'なぜ', text: 'な\nぜ', type: 'vertical', color: 'blue' },
-    { label: 'どのように', text: 'ど\nの\nよ\nう\nに', type: 'vertical', color: 'blue' },
-    { label: 'はじめ', text: 'は\nじ\nめ', type: 'vertical', color: 'black' },
-    { label: '中', text: '中', type: 'vertical', color: 'black' },
-    { label: 'おわり', text: 'お\nわ\nり', type: 'vertical', color: 'black' },
-    { label: '序論', text: '序\n論', type: 'vertical', color: 'black' },
-    { label: '本論', text: '本\n論', type: 'vertical', color: 'black' },
-    { label: '結論', text: '結\n論', type: 'vertical', color: 'black' },
-    { label: '問題', text: '問\n題', type: 'vertical', color: 'blue' },
-    { label: '考え', text: '筆\n者\nの\n考\nえ', type: 'vertical', color: 'red' },
-    { label: 'まとめ', text: 'ま\nと\nめ', type: 'vertical', color: 'black' },
-    { label: '主語', text: '主\n語', type: 'vertical', color: 'green' },
-    { label: '述語', text: '述\n語', type: 'vertical', color: 'green' },
-    { label: '怒り', icon: '💢', color: 'red', type: 'text' },
-    { label: '喜び', icon: '😆', color: 'orange', type: 'text' },
-    { label: '悲しみ', icon: '😭', color: 'blue', type: 'text' },
-    { label: '驚き', icon: '❗', color: 'red', type: 'text' },
-    { label: '①', icon: '①', color: 'black', type: 'text' },
-    { label: '②', icon: '②', color: 'black', type: 'text' },
-    { label: '③', icon: '③', color: 'black', type: 'text' },
-    { label: '④', icon: '④', color: 'black', type: 'text' },
-    { label: '⑤', icon: '⑤', color: 'black', type: 'text' },
-    { label: '⑥', icon: '⑥', color: 'black', type: 'text' },
-    { label: '⑦', icon: '⑦', color: 'black', type: 'text' },
-    { label: '⑧', icon: '⑧', color: 'black', type: 'text' },
-    { label: '⑨', icon: '⑨', color: 'black', type: 'text' },
-    { label: '⑩', icon: '⑩', color: 'black', type: 'text' },
-    { label: '⑪', icon: '⑪', color: 'black', type: 'text' },
-    { label: '⑫', icon: '⑫', color: 'black', type: 'text' },
-    { label: '⑬', icon: '⑬', color: 'black', type: 'text' },
-    { label: '⑭', icon: '⑭', color: 'black', type: 'text' },
-    { label: '⑮', icon: '⑮', color: 'black', type: 'text' },
-    { label: '⑯', icon: '⑯', color: 'black', type: 'text' },
-    { label: '⑰', icon: '⑰', color: 'black', type: 'text' },
-    { label: '⑱', icon: '⑱', color: 'black', type: 'text' },
-    { label: '⑲', icon: '⑲', color: 'black', type: 'text' },
-    { label: '⑳', icon: '⑳', color: 'black', type: 'text' }
-  ],
-  'math': [
-    { label: '1', subtype: 'block-1', type: 'math', icon: '🔲' },
-    { label: '10', subtype: 'block-10', type: 'math', icon: '❚' },
-    { label: '100', subtype: 'block-100', type: 'math', icon: '▦' },
-    { label: '1000', subtype: 'block-1000', type: 'math', icon: '🧊' },
-    { label: '位取り', subtype: 'place-value', type: 'math', icon: '📊' },
-    { label: '筆算', subtype: 'calc-frame', type: 'math', icon: '📝' },
-    { label: '立方体', subtype: 'cube', type: 'math', icon: '🎲' },
-    { label: '直方体', subtype: 'cuboid', type: 'math', icon: '📦' },
-    { label: '円柱', subtype: 'cylinder', type: 'math', icon: '🛢' },
-    { label: '平行四', subtype: 'parallelogram', type: 'math', icon: '▱' },
-    { label: 'ひし形', subtype: 'rhombus', type: 'math', icon: '◇' },
-    { label: '台形', subtype: 'trapezoid', type: 'math', icon: '⏢' },
-    { label: '五角形', subtype: 'pentagon', type: 'math', icon: '⬠' },
-    { label: '六角形', subtype: 'hexagon', type: 'math', icon: '⬡' },
-    { label: '＋', icon: '＋', color: 'black', type: 'text' },
-    { label: '－', icon: '－', color: 'black', type: 'text' },
-    { label: '＝', icon: '＝', color: 'black', type: 'text' },
-    { label: '×', icon: '×', color: 'black', type: 'text' },
-    { label: '÷', icon: '÷', color: 'black', type: 'text' },
-    { label: '＜', icon: '＜', color: 'black', type: 'text' },
-    { label: '＞', icon: '＞', color: 'black', type: 'text' },
-    { label: 'およそ', icon: '≒', color: 'black', type: 'text' },
-    { label: '％', icon: '％', color: 'black', type: 'text' },
-    { label: '円', icon: '🔵', color: 'blue', type: 'text' },
-    { label: '三角', icon: '🔺', color: 'red', type: 'text' },
-    { label: '四角', icon: '🟥', color: 'green', type: 'text' },
-    { label: '直角', icon: '∟', color: 'black', type: 'text' },
-    { label: '平行', icon: '∥', color: 'black', type: 'text' },
-    { label: '垂直', icon: '⊥', color: 'black', type: 'text' },
-    { label: '三角定規', subtype: 'triangle-ruler', type: 'math', icon: '📐' },
-    { label: '分度器', icon: '⌒', color: 'black', type: 'text' },
-    { label: 'L', icon: 'L', color: 'black', type: 'text' },
-    { label: 'dL', icon: 'dL', color: 'black', type: 'text' },
-    { label: 'mL', icon: 'mL', color: 'black', type: 'text' },
-    { label: 'kg', icon: 'kg', color: 'black', type: 'text' },
-    { label: 'g', icon: 'g', color: 'black', type: 'text' },
-    { label: 'cm', icon: 'cm', color: 'black', type: 'text' },
-    { label: 'm', icon: 'm', color: 'black', type: 'text' },
-    { label: 'km', icon: 'km', color: 'black', type: 'text' },
-    { label: '❶', icon: '❶', color: 'black', type: 'text' },
-    { label: '❷', icon: '❷', color: 'black', type: 'text' },
-    { label: '❸', icon: '❸', color: 'black', type: 'text' }
-  ],
-  'eng': [
-    { label: 'Good', icon: 'Good', color: 'red', type: 'text' },
-    { label: 'Nice', icon: 'Nice', color: 'blue', type: 'text' },
-    { label: 'A', icon: 'A', color: 'black', type: 'text' },
-    { label: 'B', icon: 'B', color: 'black', type: 'text' },
-    { label: 'C', icon: 'C', color: 'black', type: 'text' },
-    { label: 'D', icon: 'D', color: 'black', type: 'text' },
-    { label: 'US', icon: '🇺🇸', color: 'black', type: 'text' },
-    { label: 'UK', icon: '🇬🇧', color: 'black', type: 'text' },
-    { label: 'Apple', icon: '🍎', color: 'red', type: 'text' },
-    { label: 'Pen', icon: '🖊️', color: 'black', type: 'text' }
-  ],
-  'social': [
-    { label: '晴れ', icon: '☀', color: 'red', type: 'text' },
-    { label: '曇り', icon: '☁', color: 'gray', type: 'text' },
-    { label: '雨', icon: '☔', color: 'blue', type: 'text' },
-    { label: '雪', icon: '⛄', color: 'cyan', type: 'text' },
-    { label: '虫眼鏡', icon: '🔍', color: 'black', type: 'text' },
-    { label: '磁石', icon: '🧲', color: 'red', type: 'text' },
-    { label: '電気', icon: '💡', color: 'orange', type: 'text' },
-    { label: '電池', icon: '🔋', color: 'green', type: 'text' },
-    { label: '実験', icon: '🧪', color: 'purple', type: 'text' },
-    { label: '顕微鏡', icon: '🔬', color: 'black', type: 'text' },
-    { label: '温度計', icon: '🌡️', color: 'red', type: 'text' },
-    { label: '植物', icon: '🌱', color: 'green', type: 'text' },
-    { label: '花', icon: '🌷', color: 'pink', type: 'text' },
-    { label: '月', icon: '🌕', color: 'gold', type: 'text' },
-    { label: '星', icon: '⭐', color: 'gold', type: 'text' },
-    { label: '学校', icon: '🏫', color: 'black', type: 'text' },
-    { label: '市役所', icon: '◎', color: 'black', type: 'text' },
-    { label: '交番', icon: 'X', color: 'black', type: 'text' },
-    { label: '消防署', icon: 'Y', color: 'red', type: 'text' },
-    { label: '病院', icon: '🏥', color: 'red', type: 'text' },
-    { label: '郵便局', icon: '📮', color: 'red', type: 'text' },
-    { label: '神社', icon: '⛩️', color: 'red', type: 'text' },
-    { label: '寺院', icon: '卍', color: 'black', type: 'text' },
-    { label: '城', icon: '🏯', color: 'black', type: 'text' },
-    { label: '工場', icon: '🏭', color: 'black', type: 'text' },
-    { label: '温泉', icon: '♨️', color: 'red', type: 'text' },
-    { label: '田', icon: '田', color: 'black', type: 'text' },
-    { label: '畑', icon: 'V', color: 'black', type: 'text' },
-    { label: '茶畑', icon: '∴', color: 'green', type: 'text' },
-    { label: '果樹園', icon: '🍎', color: 'red', type: 'text' },
-    { label: '針葉樹', icon: '🌲', color: 'green', type: 'text' },
-    { label: '広葉樹', icon: '🌳', color: 'green', type: 'text' },
-    { label: '地図', icon: '🗺️', color: 'green', type: 'text' },
-    { label: '方位', icon: '🧭', color: 'brown', type: 'text' }
-  ],
-  'life': [
-    { label: '発表', icon: '✋', color: 'black', type: 'text' },
-    { label: '話し合い', icon: '🗣️', color: 'blue', type: 'text' },
-    { label: '静かに', icon: '🤫', color: 'red', type: 'text' },
-    { label: 'ペア', icon: '👥', color: 'green', type: 'text' },
-    { label: 'グループ', icon: '👨‍👩‍👧‍👦', color: 'orange', type: 'text' },
-    { label: '重要', icon: '💡', color: 'gold', type: 'text' },
-    { label: 'はてな', icon: '❓', color: 'blue', type: 'text' },
-    { label: '給食', icon: '🍱', color: 'orange', type: 'text' },
-    { label: '掃除', icon: '🧹', color: 'blue', type: 'text' },
-    { label: '当番', icon: '📛', color: 'red', type: 'text' },
-    { label: '時間', icon: '⌛', color: 'black', type: 'text' },
-    { label: '時計', icon: '⏰', color: 'black', type: 'text' },
-    { label: '勉強', icon: '📖', color: 'blue', type: 'text' },
-    { label: '図書', icon: '📚', color: 'brown', type: 'text' },
-    { label: '遊び', icon: '⚽', color: 'black', type: 'text' },
-    { label: '保健', icon: '😷', color: 'green', type: 'text' },
-    { label: '音楽', icon: '🎵', color: 'black', type: 'text' },
-    { label: '天気', icon: '☀', color: 'orange', type: 'text' },
-    { label: '雨', icon: '☔', color: 'blue', type: 'text' },
-    { label: '星', icon: '★', color: 'orange', type: 'text' },
-    { label: 'ハート', icon: '❤', color: 'pink', type: 'text' },
-    { label: '矢印', icon: '➡', color: 'black', type: 'text' },
-    { label: '三角', icon: '▲', color: 'black', type: 'text' },
-    { label: '禁止', icon: '🛑', color: 'red', type: 'text' }
-  ]
-};
-
-const COLORS = ['#000000', '#ef4444', '#3b82f6', '#22c55e', '#f59e0b'];
-const STICKY_COLORS = ['#fff740', '#ffccff', '#ccffff', '#ccffcc'];
-
-// スマホ・タブレットでの「戻る」スワイプ(ジェスチャー操作)の判定値
-const EDGE_SWIPE_ZONE = 28;       // 画面の左右の端からこの範囲(px)で始まったスワイプを対象にする
-const EDGE_SWIPE_DISTANCE = 64;   // 中央方向へこれ以上(px)動いたら「戻る」とみなす
-const EDGE_SWIPE_MAX_SLOPE = 60;  // 縦方向のずれ(px)がこれを超えたらスクロール操作とみなして中止する
-const BACK_NAV_INTERVAL = 400;    // 「戻る」が二重に処理されるのを防ぐ最小間隔(ms)
-
-// 選択モードでの「ページ送り」スワイプの判定値
-const PAGE_SWIPE_SLOP = 12;       // この距離(px)動いた時点で、ページ送りか縦スクロールかを見分ける
-const PAGE_SWIPE_DISTANCE = 80;   // 横方向へこれ以上(px)動いたらページを送る
-const OBJECT_GRAB_MARGIN = 24;    // 選択中の図形のこの範囲(px)内から始めた操作は、図形の移動を優先する
-
-const hexToRgba = (hex, alpha) => {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-};
+// 定数・スタンプのデータ・fabric まわりの道具・画面の枠は別ファイルへ分けてある。
+// このファイルには「アプリの流れ」だけを残す。
+import {
+  APP_NAME,
+  DB_KEY_TEXTBOOKS, DB_KEY_DRAWINGS, DB_KEY_MYSTAMPS, DB_KEY_LAST_OPENED, DB_KEY_VIEW_MODE,
+  BACKUP_FORMAT, BACKUP_VERSION,
+  GOOGLE_CLIENT_ID, GDRIVE_SCOPE, GDRIVE_FILE_NAME, GIS_SRC,
+  DB_KEY_DRIVE_FILE_ID, DB_KEY_DRIVE_AUTOSAVE, DB_KEY_DRIVE_LAST_SYNC,
+  COLORS, STICKY_COLORS,
+  EDGE_SWIPE_ZONE, EDGE_SWIPE_DISTANCE, EDGE_SWIPE_MAX_SLOPE, BACK_NAV_INTERVAL,
+  PAGE_SWIPE_SLOP, PAGE_SWIPE_DISTANCE, OBJECT_GRAB_MARGIN,
+  PDF_RENDER_SCALE,
+} from './constants.js';
+import { STAMP_CATEGORIES, STAMPS_DATA } from './data/stamps.js';
+import { StampPreview, createPremiumStamp } from './data/sealStamps.jsx';
+import { serializeCanvas, isSafeUrl, applyCanvasMode, createMathShape } from './lib/fabricHelpers.js';
+import { useExternalScripts } from './hooks/useExternalScripts.js';
+import { Header, Footer, TimerPanel } from './components/Chrome.jsx';
 
 // ==========================================
-// 評価スタンプ (ベクター描画・高品質版)
-// 絵文字と違い端末を問わず同じ見た目で、拡大しても劣化しない
+// メインアプリケーション
 // ==========================================
-const STAMP_RED = '#e0392f';
-
-// 中心(cx,cy)から外側へ向かう渦巻きのSVGパスを生成する
-const buildSpiralPath = (cx, cy, rStart, rEnd, turns) => {
-  const steps = Math.round(turns * 36);
-  let d = '';
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const angle = t * turns * Math.PI * 2 - Math.PI / 2;
-    const r = rStart + (rEnd - rStart) * t;
-    const x = cx + r * Math.cos(angle);
-    const y = cy + r * Math.sin(angle);
-    d += `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)} `;
-  }
-  return d.trim();
-};
-
-// 花びら状(スカラップ)の縁取りパスを生成する
-const buildFlowerPath = (cx, cy, r, petals, bulge) => {
-  let d = '';
-  for (let i = 0; i <= petals; i++) {
-    const a = (i / petals) * Math.PI * 2 - Math.PI / 2;
-    const x = (cx + r * Math.cos(a)).toFixed(1);
-    const y = (cy + r * Math.sin(a)).toFixed(1);
-    if (i === 0) { d += `M ${x} ${y} `; continue; }
-    const am = ((i - 0.5) / petals) * Math.PI * 2 - Math.PI / 2;
-    const qx = (cx + (r + bulge) * Math.cos(am)).toFixed(1);
-    const qy = (cy + (r + bulge) * Math.sin(am)).toFixed(1);
-    d += `Q ${qx} ${qy} ${x} ${y} `;
-  }
-  return d.trim() + ' Z';
-};
-
-const HANAMARU_FLOWER_PATH = buildFlowerPath(60, 60, 40, 9, 15);
-const HANAMARU_SPIRAL_PATH = buildSpiralPath(60, 60, 3, 27, 2.6);
-const SEAL_FLOWER_PATH = buildFlowerPath(60, 60, 46, 12, 8);
-const CHECK_PATH = 'M 24 62 L 50 88 L 96 30';
-const TRIANGLE_PATH = 'M 60 18 L 101 94 L 19 94 Z';
-
-// 検印(ハンコ)型スタンプの定義。lines を縁取り内に配置する
-const SEAL_STAMPS = {
-  'seal-taihen': { lines: ['たいへん', 'よく', 'できました'], border: 'flower', fontSize: 17 },
-  'seal-yoku': { lines: ['よく', 'できました'], border: 'flower', fontSize: 18 },
-  'seal-ganbari': { lines: ['がんばり', 'ました'], border: 'circle', fontSize: 20 },
-  'seal-mimashita': { lines: ['みました'], border: 'circle', fontSize: 21 },
-  'seal-goukaku': { lines: ['合', '格'], border: 'square', fontSize: 30 },
-  'hyakuten': { lines: ['100点'], border: 'double', fontSize: 24 },
-};
-
-// fabric.js オブジェクトとして評価スタンプを組み立てる
-const createPremiumStamp = (subtype) => {
-  if (!window.fabric) return null;
-  const fabric = window.fabric;
-  const stroke = {
-    fill: 'transparent', stroke: STAMP_RED, strokeLineCap: 'round', strokeLineJoin: 'round',
-    originX: 'center', originY: 'center', left: 0, top: 0,
-  };
-  const parts = [];
-
-  const seal = SEAL_STAMPS[subtype];
-  if (seal) {
-    if (seal.border === 'flower') parts.push(new fabric.Path(SEAL_FLOWER_PATH, { ...stroke, strokeWidth: 4.5 }));
-    else if (seal.border === 'double') {
-      parts.push(new fabric.Circle({ radius: 50, ...stroke, strokeWidth: 4.5 }));
-      parts.push(new fabric.Circle({ radius: 42, ...stroke, strokeWidth: 3 }));
-    }
-    else if (seal.border === 'square') parts.push(new fabric.Rect({ width: 78, height: 78, rx: 10, ry: 10, ...stroke, strokeWidth: 4.5 }));
-    else parts.push(new fabric.Circle({ radius: 50, ...stroke, strokeWidth: 4.5 }));
-    parts.push(new fabric.Text(seal.lines.join('\n'), {
-      fontSize: seal.fontSize, fill: STAMP_RED, fontFamily: 'Zen Maru Gothic', fontWeight: '700',
-      textAlign: 'center', lineHeight: 1.12, originX: 'center', originY: 'center', left: 0, top: 0,
-    }));
-  } else if (subtype === 'hanamaru') {
-    parts.push(new fabric.Path(HANAMARU_FLOWER_PATH, { ...stroke, strokeWidth: 6 }));
-    parts.push(new fabric.Path(HANAMARU_SPIRAL_PATH, { ...stroke, strokeWidth: 5 }));
-  } else if (subtype === 'double-circle') {
-    parts.push(new fabric.Circle({ radius: 46, ...stroke, strokeWidth: 6 }));
-    parts.push(new fabric.Circle({ radius: 31, ...stroke, strokeWidth: 5 }));
-  } else if (subtype === 'circle') {
-    parts.push(new fabric.Circle({ radius: 46, ...stroke, strokeWidth: 6 }));
-  } else if (subtype === 'triangle') {
-    parts.push(new fabric.Path(TRIANGLE_PATH, { ...stroke, strokeWidth: 6 }));
-  } else if (subtype === 'check') {
-    parts.push(new fabric.Path(CHECK_PATH, { ...stroke, strokeWidth: 11 }));
-  } else {
-    return null;
-  }
-
-  return new fabric.Group(parts, { originX: 'center', originY: 'center', opacity: 0.95 });
-};
-
-// スタンプ一覧メニューでのプレビュー (キャンバス上と同じ形状データを共有)
-const StampPreview = ({ subtype }) => {
-  const seal = SEAL_STAMPS[subtype];
-  const strokeProps = { fill: 'none', stroke: STAMP_RED, strokeLinecap: 'round', strokeLinejoin: 'round' };
-  return (
-    <svg viewBox="0 0 120 120" className="w-9 h-9" aria-hidden="true">
-      {subtype === 'hanamaru' && (<>
-        <path d={HANAMARU_FLOWER_PATH} {...strokeProps} strokeWidth="6" />
-        <path d={HANAMARU_SPIRAL_PATH} {...strokeProps} strokeWidth="5" />
-      </>)}
-      {subtype === 'double-circle' && (<>
-        <circle cx="60" cy="60" r="46" {...strokeProps} strokeWidth="6" />
-        <circle cx="60" cy="60" r="31" {...strokeProps} strokeWidth="5" />
-      </>)}
-      {subtype === 'circle' && <circle cx="60" cy="60" r="46" {...strokeProps} strokeWidth="6" />}
-      {subtype === 'triangle' && <path d={TRIANGLE_PATH} {...strokeProps} strokeWidth="6" />}
-      {subtype === 'check' && <path d={CHECK_PATH} {...strokeProps} strokeWidth="11" />}
-      {seal && (<>
-        {seal.border === 'flower' && <path d={SEAL_FLOWER_PATH} {...strokeProps} strokeWidth="4.5" />}
-        {seal.border === 'circle' && <circle cx="60" cy="60" r="50" {...strokeProps} strokeWidth="4.5" />}
-        {seal.border === 'double' && (<>
-          <circle cx="60" cy="60" r="50" {...strokeProps} strokeWidth="4.5" />
-          <circle cx="60" cy="60" r="42" {...strokeProps} strokeWidth="3" />
-        </>)}
-        {seal.border === 'square' && <rect x="21" y="21" width="78" height="78" rx="10" {...strokeProps} strokeWidth="4.5" />}
-        {seal.lines.map((line, i) => (
-          <text
-            key={i} x="60" y={60 + (i - (seal.lines.length - 1) / 2) * seal.fontSize * 1.12}
-            textAnchor="middle" dominantBaseline="central" fill={STAMP_RED}
-            fontSize={seal.fontSize} fontWeight="700" fontFamily="'Zen Maru Gothic', sans-serif"
-          >{line}</text>
-        ))}
-      </>)}
-    </svg>
-  );
-};
-
-const CUSTOM_JSON_PROPS = ['linkType', 'linkTarget', 'stampType'];
-
-// 背景画像(ページ画像そのもの)は毎回ページ表示時に再設定するため、
-// 保存データ・履歴には含めない(保存容量と処理時間を大幅に削減)
-const serializeCanvas = (canvas) => {
-  const json = canvas.toJSON(CUSTOM_JSON_PROPS);
-  delete json.backgroundImage;
-  // 保存時のキャンバス幅を記録し、画面サイズの違う端末で開いても
-  // 書き込み位置を正しく再現できるようにする
-  json.canvasWidth = canvas.getWidth();
-  return json;
-};
-
-const isSafeUrl = (url) => /^https?:\/\//i.test(url);
-
-// ツールモードをキャンバスに適用する(初期化時とモード変更時で共通)
-const applyCanvasMode = (canvas, mode, color) => {
-  canvas.isDrawingMode = false;
-  canvas.selection = false;
-  canvas.defaultCursor = 'crosshair';
-  canvas.hoverCursor = 'crosshair';
-
-  if (mode === 'pencil') {
-    canvas.isDrawingMode = true;
-    canvas.freeDrawingBrush = new window.fabric.PencilBrush(canvas);
-    canvas.freeDrawingBrush.color = color;
-    canvas.freeDrawingBrush.width = 4;
-  } else if (mode === 'highlighter') {
-    canvas.isDrawingMode = true;
-    canvas.freeDrawingBrush = new window.fabric.PencilBrush(canvas);
-    canvas.freeDrawingBrush.color = hexToRgba(color, 0.4);
-    canvas.freeDrawingBrush.width = 24;
-  } else if (mode === 'eraser') {
-    canvas.defaultCursor = 'cell';
-    canvas.hoverCursor = 'cell';
-  } else if (mode === 'qr') {
-    canvas.defaultCursor = 'crosshair';
-    canvas.hoverCursor = 'crosshair';
-  } else if (mode === 'select') {
-    canvas.defaultCursor = 'default';
-    canvas.hoverCursor = 'move';
-    canvas.selection = true;
-  }
-};
-
-const createMathShape = (subtype, x, y) => {
-  if (!window.fabric) return null;
-  const fabric = window.fabric;
-  const yellow = '#ffeb3b'; const stroke = '#666';
-  
-  if (subtype === 'block-1') { return new fabric.Rect({ left: x, top: y, width: 30, height: 30, fill: yellow, stroke: stroke, strokeWidth: 2, originX: 'center', originY: 'center' }); }
-  else if (subtype === 'block-10') { const grp = [new fabric.Rect({ width: 30, height: 300, fill: yellow, stroke: stroke, strokeWidth: 2 })]; for (let i = 1; i < 10; i++) grp.push(new fabric.Line([0, i * 30, 30, i * 30], { stroke: stroke, strokeWidth: 1 })); return new fabric.Group(grp, { left: x, top: y, originX: 'center', originY: 'center', scaleX: 0.3, scaleY: 0.3 }); }
-  else if (subtype === 'block-100') { const rect = new fabric.Rect({ width: 300, height: 300, fill: yellow, stroke: stroke, strokeWidth: 2 }); const lines = [rect]; for (let i = 1; i < 10; i++) { lines.push(new fabric.Line([0, i * 30, 300, i * 30], { stroke: stroke, strokeWidth: 1 })); lines.push(new fabric.Line([i * 30, 0, i * 30, 300], { stroke: stroke, strokeWidth: 1 })); } return new fabric.Group(lines, { left: x, top: y, originX: 'center', originY: 'center', scaleX: 0.2, scaleY: 0.2 }); }
-  else if (subtype === 'block-1000') { const size = 100; const offset = 30; const front = new fabric.Rect({ left: 0, top: offset, width: size, height: size, fill: yellow, stroke: stroke, strokeWidth: 2 }); const top = new fabric.Polygon([{ x: 0, y: offset }, { x: offset, y: 0 }, { x: size + offset, y: 0 }, { x: size, y: offset }], { fill: '#fdd835', stroke: stroke, strokeWidth: 2 }); const side = new fabric.Polygon([{ x: size, y: offset }, { x: size + offset, y: 0 }, { x: size + offset, y: size }, { x: size, y: size + offset }], { fill: '#fbc02d', stroke: stroke, strokeWidth: 2 }); return new fabric.Group([front, top, side], { left: x, top: y, originX: 'center', originY: 'center', scaleX: 0.6, scaleY: 0.6 }); }
-  else if (subtype === 'place-value') { const w = 300; const h = 150; const bg = new fabric.Rect({ width: w, height: h, fill: 'white', stroke: 'black', strokeWidth: 2 }); const grp = [bg, new fabric.Line([w / 4, 0, w / 4, h], { stroke: 'black' }), new fabric.Line([w / 2, 0, w / 2, h], { stroke: 'black' }), new fabric.Line([w * 3 / 4, 0, w * 3 / 4, h], { stroke: 'black' }), new fabric.Line([0, 40, w, 40], { stroke: 'black' })]; const opts = { fontSize: 24, fontFamily: 'Zen Maru Gothic', fill: 'black', top: 8 }; grp.push(new fabric.Text('千', { ...opts, left: w * 0.125 - 12 }), new fabric.Text('百', { ...opts, left: w * 0.375 - 12 }), new fabric.Text('十', { ...opts, left: w * 0.625 - 12 }), new fabric.Text('一', { ...opts, left: w * 0.875 - 12 })); return new fabric.Group(grp, { left: x, top: y, originX: 'center', originY: 'center' }); }
-  else if (subtype === 'calc-frame') { const grp = []; const step = 40; for (let i = 0; i < 4; i++) grp.push(new fabric.Line([i * step, 0, i * step, step * 4], { stroke: '#ddd', strokeDashArray: [5, 5] })); for (let i = 0; i < 5; i++) grp.push(new fabric.Line([0, i * step, step * 3, i * step], { stroke: '#ddd', strokeDashArray: [5, 5] })); grp.push(new fabric.Line([0, step * 3, step * 3, step * 3], { stroke: 'black', strokeWidth: 2 })); return new fabric.Group(grp, { left: x, top: y, originX: 'center', originY: 'center', backgroundColor: 'rgba(255,255,255,0.5)' }); }
-
-  // Geometry 2D
-  else if (subtype === 'parallelogram') { return new fabric.Polygon([{ x: 20, y: 0 }, { x: 120, y: 0 }, { x: 100, y: 60 }, { x: 0, y: 60 }], { left: x, top: y, fill: 'transparent', stroke: 'black', strokeWidth: 2, originX: 'center', originY: 'center' }); }
-  else if (subtype === 'rhombus') { return new fabric.Polygon([{ x: 50, y: 0 }, { x: 100, y: 40 }, { x: 50, y: 80 }, { x: 0, y: 40 }], { left: x, top: y, fill: 'transparent', stroke: 'black', strokeWidth: 2, originX: 'center', originY: 'center' }); }
-  else if (subtype === 'trapezoid') { return new fabric.Polygon([{ x: 30, y: 0 }, { x: 90, y: 0 }, { x: 120, y: 60 }, { x: 0, y: 60 }], { left: x, top: y, fill: 'transparent', stroke: 'black', strokeWidth: 2, originX: 'center', originY: 'center' }); }
-  else if (subtype === 'pentagon') { return new fabric.Polygon([{ x: 50, y: 0 }, { x: 100, y: 38 }, { x: 81, y: 95 }, { x: 19, y: 95 }, { x: 0, y: 38 }], { left: x, top: y, fill: 'transparent', stroke: 'black', strokeWidth: 2, originX: 'center', originY: 'center' }); }
-  else if (subtype === 'hexagon') { return new fabric.Polygon([{ x: 25, y: 0 }, { x: 75, y: 0 }, { x: 100, y: 43 }, { x: 75, y: 86 }, { x: 25, y: 86 }, { x: 0, y: 43 }], { left: x, top: y, fill: 'transparent', stroke: 'black', strokeWidth: 2, originX: 'center', originY: 'center' }); }
-
-  // Geometry 3D (Wireframe)
-  else if (subtype === 'cube') {
-    const s = 80; const o = 30;
-    const front = new fabric.Rect({ width: s, height: s, fill: 'transparent', stroke: 'black', strokeWidth: 2 });
-    const top = new fabric.Polygon([{ x: 0, y: s }, { x: o, y: s - o }, { x: s + o, y: s - o }, { x: s, y: s }], { fill: 'transparent', stroke: 'black', strokeWidth: 2 });
-    const side = new fabric.Polygon([{ x: s, y: s }, { x: s + o, y: s - o }, { x: s + o, y: 2 * s - o }, { x: s, y: 2 * s }], { fill: 'transparent', stroke: 'black', strokeWidth: 2 });
-    return new fabric.Group([front, top, side], { left: x, top: y, originX: 'center', originY: 'center', scaleX: 0.8, scaleY: 0.8 });
-  }
-  else if (subtype === 'cuboid') {
-    const w = 120, h = 70, d = 30;
-    const front = new fabric.Rect({ width: w, height: h, fill: 'transparent', stroke: 'black', strokeWidth: 2 });
-    const top = new fabric.Polygon([{ x: 0, y: 0 }, { x: d, y: -d }, { x: w + d, y: -d }, { x: w, y: 0 }], { fill: 'transparent', stroke: 'black', strokeWidth: 2 });
-    const side = new fabric.Polygon([{ x: w, y: 0 }, { x: w + d, y: -d }, { x: w + d, y: h - d }, { x: w, y: h }], { fill: 'transparent', stroke: 'black', strokeWidth: 2 });
-    return new fabric.Group([front, top, side], { left: x, top: y, originX: 'center', originY: 'center', scaleX: 0.8, scaleY: 0.8 });
-  }
-  else if (subtype === 'cylinder') {
-    const w = 60, h = 80;
-    const e1 = new fabric.Ellipse({ rx: w / 2, ry: 10, fill: 'transparent', stroke: 'black', strokeWidth: 2, top: 0 });
-    const e2 = new fabric.Ellipse({ rx: w / 2, ry: 10, fill: 'transparent', stroke: 'black', strokeWidth: 2, top: h });
-    const l1 = new fabric.Line([0, 10, 0, h + 10], { stroke: 'black', strokeWidth: 2 });
-    const l2 = new fabric.Line([w, 10, w, h + 10], { stroke: 'black', strokeWidth: 2 });
-    return new fabric.Group([e1, e2, l1, l2], { left: x, top: y, originX: 'center', originY: 'center' });
-  }
-
-  // Tools
-  else if (subtype === 'triangle-ruler') {
-    return new fabric.Polygon([{ x: 0, y: 100 }, { x: 100, y: 100 }, { x: 0, y: 0 }], { left: x, top: y, fill: 'rgba(255,255,255,0.5)', stroke: 'black', strokeWidth: 2, originX: 'center', originY: 'center' });
-  }
-
-  return null;
-};
-
-// ==========================================
-// 2. 外部ライブラリ読み込み用フック (安定化版)
-// ==========================================
-const useExternalScripts = () => {
-  const [status, setStatus] = useState({ loaded: false, error: null });
-
-  useEffect(() => {
-    const loadScript = (src) => new Promise((resolve, reject) => {
-      let script = document.querySelector(`script[src="${src}"]`);
-      if (script) {
-        if (script.getAttribute('data-loaded') === 'true') {
-          return resolve();
-        } else {
-          script.addEventListener('load', resolve);
-          script.addEventListener('error', () => reject(new Error(`読み込み失敗: ${src}`)));
-          return;
-        }
-      }
-      script = document.createElement('script');
-      script.src = src;
-      script.crossOrigin = "anonymous";
-      script.onload = () => { 
-        script.setAttribute('data-loaded', 'true'); 
-        resolve(); 
-      };
-      script.onerror = () => reject(new Error(`読み込み失敗: ${src}`));
-      document.head.appendChild(script);
-    });
-
-    const init = async () => {
-      try {
-        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js');
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-        
-        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js');
-        await loadScript('https://cdn.jsdelivr.net/npm/idb-keyval@6.2.1/dist/umd.js');
-        await loadScript('https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js');
-        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js');
-        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcode/1.5.1/qrcode.min.js');
-        
-        setStatus({ loaded: true, error: null });
-      } catch (error) { 
-        console.error("ライブラリ読み込みエラー:", error);
-        setStatus({ loaded: false, error: error.message });
-      }
-    };
-    init();
-  }, []);
-
-  return status;
-};
-
-// ==========================================
-// 3. 共通UIコンポーネント (モダン化)
-// ==========================================
-
-const Header = ({ onGoHome, title }) => (
-  <nav className="bg-white border-b-4 border-amber-500 px-3 sm:px-6 py-1.5 sm:py-2.5 flex justify-between items-center shadow-sm z-20 shrink-0">
-    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-      {onGoHome ? (
-        <button onClick={onGoHome} className="flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-amber-600 bg-slate-100 hover:bg-amber-50 px-2 sm:px-3 py-1.5 rounded-xl transition-all active:scale-95 shrink-0">
-          <ChevronLeft size={18} /> <span className="hidden sm:inline">一覧へ戻る</span>
-        </button>
-      ) : (
-        <div className="bg-amber-100 p-2 rounded-xl text-amber-600 shadow-inner shrink-0"><Book size={22} /></div>
-      )}
-      <h1 className="text-base sm:text-xl font-bold text-slate-800 tracking-tight line-clamp-1">{title || APP_NAME}</h1>
-    </div>
-  </nav>
-);
-
-// 編集画面では学習領域を最大化するため、スマホ等の小さな画面ではフッターを隠す
-const Footer = ({ compact = false }) => (
-  <footer className={`w-full bg-white border-t border-slate-200 py-1.5 text-center text-xs text-slate-500 font-bold shadow-sm shrink-0 z-20 ${compact ? 'hidden lg:block' : ''}`}>
-    &copy; {new Date().getFullYear()} {APP_NAME} <a href={SNS_LINK} target="_blank" rel="noopener noreferrer" className="text-inherit hover:text-inherit no-underline cursor-default">{DEVELOPER_NAME}</a>
-  </footer>
-);
-
-// タイマー＆ストップウォッチパネル
-const TimerPanel = ({ onClose }) => {
-  const [tab, setTab] = useState('timer');
-  const [timeLeft, setTimeLeft] = useState(300);
-  const [isTimerRunning, setIsTimerRunning] = useState(false);
-  const [swTime, setSwTime] = useState(0);
-  const [isSwRunning, setIsSwRunning] = useState(false);
-  
-  useEffect(() => {
-    let interval;
-    if (tab === 'timer' && isTimerRunning && timeLeft > 0) interval = setInterval(() => setTimeLeft(t => t - 1), 1000);
-    else if (tab === 'timer' && timeLeft === 0) setIsTimerRunning(false);
-    else if (tab === 'stopwatch' && isSwRunning) interval = setInterval(() => setSwTime(t => t + 1), 1000);
-    return () => clearInterval(interval);
-  }, [isTimerRunning, timeLeft, isSwRunning, tab]);
-
-  const displayTime = tab === 'timer' ? timeLeft : swTime;
-  const mins = Math.floor(displayTime / 60).toString().padStart(2, '0');
-  const secs = (displayTime % 60).toString().padStart(2, '0');
-  const isRunning = tab === 'timer' ? isTimerRunning : isSwRunning;
-
-  return (
-    <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-md border border-slate-200 rounded-2xl shadow-xl z-50 p-4 w-64 animate-in fade-in slide-in-from-top-4">
-      <div className="flex justify-between items-center mb-4">
-        <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner">
-          <button onClick={() => setTab('timer')} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${tab === 'timer' ? 'bg-white shadow-sm text-amber-600' : 'text-slate-500 hover:text-slate-700'}`}>タイマー</button>
-          <button onClick={() => setTab('stopwatch')} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${tab === 'stopwatch' ? 'bg-white shadow-sm text-amber-600' : 'text-slate-500 hover:text-slate-700'}`}>ウォッチ</button>
-        </div>
-        <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"><X size={18}/></button>
-      </div>
-      
-      <div className={`text-4xl font-mono text-center font-bold mb-4 p-4 rounded-xl border-2 transition-colors ${tab === 'timer' && timeLeft === 0 ? 'bg-red-50 text-red-500 border-red-200 animate-pulse shadow-inner' : 'bg-slate-50 text-slate-800 border-slate-200 shadow-inner'}`}>
-        {mins}:{secs}
-      </div>
-      
-      {tab === 'timer' ? (
-        <div className="flex justify-center gap-2 mb-4">
-          <button onClick={() => setTimeLeft(t => t + 60)} className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-slate-600 transition-colors">+1分</button>
-          <button onClick={() => setTimeLeft(t => t + 300)} className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-slate-600 transition-colors">+5分</button>
-          <button onClick={() => { setTimeLeft(300); setIsTimerRunning(false); }} className="px-3 py-1.5 bg-red-50 hover:bg-red-100 rounded-lg text-xs font-bold text-red-600 flex items-center transition-colors"><RotateCcw size={14}/></button>
-        </div>
-      ) : (
-        <div className="flex justify-center mb-4">
-           <button onClick={() => { setSwTime(0); setIsSwRunning(false); }} className="w-full py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-slate-600 flex items-center justify-center gap-1 transition-colors"><RotateCcw size={14}/> リセット</button>
-        </div>
-      )}
-
-      <button onClick={() => tab === 'timer' ? setIsTimerRunning(!isTimerRunning) : setIsSwRunning(!isSwRunning)} className={`w-full py-2.5 rounded-xl font-bold text-white flex justify-center items-center gap-2 transition-all active:scale-95 shadow-md ${isRunning ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-500 hover:bg-blue-600'}`}>
-        {isRunning ? <><Pause size={18}/> ストップ</> : <><Play size={18}/> スタート</>}
-      </button>
-    </div>
-  );
-};
-
-// ==========================================
-// 4. メインアプリケーション
-// ==========================================
-
 export default function App() {
   const { loaded: scriptsLoaded, error: scriptError } = useExternalScripts();
   
@@ -675,6 +84,10 @@ export default function App() {
   const [showViewMenu, setShowViewMenu] = useState(false);
   // 教科書画面ではツールバーを常時表示せず、必要なときだけ呼び出せるようにする
   const [showToolbar, setShowToolbar] = useState(false);
+  // 提示モード（電子黒板で一斉授業に使うとき、教室の後ろの席から読める大きさにする）
+  const [isPresentation, setIsPresentation] = useState(false);
+  // 「アプリを入れる」ボタンを出してよいか（Chrome から合図が来たときだけ true）
+  const [canInstall, setCanInstall] = useState(false);
 
   // Custom Dialog & Toast
   const [dialog, setDialog] = useState(null);
@@ -871,6 +284,66 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(DB_KEY_VIEW_MODE, JSON.stringify({ mode: viewMode, order: halfOrder }));
   }, [viewMode, halfOrder]);
+
+  // --- 提示モード（電子黒板・一斉授業） ---
+  // 教室のいちばん後ろの席から読めることが要件。CSS 側で <body> に付いた
+  // .presentation を見て、文字とボタンをまとめて大きくする。
+  useEffect(() => {
+    document.body.classList.toggle('presentation', isPresentation);
+    return () => document.body.classList.remove('presentation');
+  }, [isPresentation]);
+
+  // --- 「アプリを入れる」ボタン ---
+  // 合図そのものは index.html の最上部（public/pwa-install-hook.js）で
+  // 受け取り済み。ここでは、その結果をボタンの表示に反映するだけ。
+  useEffect(() => {
+    // ホーム画面から起動しているときは、もう入れる必要がないので出さない
+    const isStandalone =
+      window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    if (isStandalone) return;
+
+    if (window.__deferredInstallPrompt) setCanInstall(true);
+
+    const onInstallable = () => setCanInstall(true);
+    const onInstalled = () => setCanInstall(false);
+    window.addEventListener('pwa-installable', onInstallable);
+    window.addEventListener('pwa-installed', onInstalled);
+    return () => {
+      window.removeEventListener('pwa-installable', onInstallable);
+      window.removeEventListener('pwa-installed', onInstalled);
+    };
+  }, []);
+
+  const handleInstall = useCallback(async () => {
+    const prompt = window.__deferredInstallPrompt;
+    if (!prompt) return;
+    window.__deferredInstallPrompt = null;
+    setCanInstall(false);
+    try {
+      prompt.prompt();
+      await prompt.userChoice;
+    } catch (e) {
+      // 合図は一度きりしか使えない。失敗しても再表示はしない（二重に出ると混乱する）
+      console.warn('インストールの案内を出せませんでした', e);
+    }
+  }, []);
+
+  // --- 印刷 ---
+  // 画面はスクロールを止めて1画面に収める作りなので、そのまま印刷すると
+  // 表示中の一部しか出ない。印刷したい領域に .print-target を付け、
+  // 向きだけ <body> のクラスで切り替える（@page は普通のセレクタで書けないため）。
+  const handlePrint = useCallback(() => {
+    const canvas = fabricRef.current;
+    // 横長のページは横向きで刷らないと、まわりが大きく余ってしまう
+    const landscape = !!canvas && canvas.width > canvas.height;
+    document.body.classList.toggle('print-landscape', landscape);
+    const cleanup = () => {
+      document.body.classList.remove('print-landscape');
+      window.removeEventListener('afterprint', cleanup);
+    };
+    window.addEventListener('afterprint', cleanup);
+    window.print();
+  }, []);
 
   // --- 全画面表示 ---
   const toggleFullscreen = useCallback(() => {
@@ -1102,11 +575,20 @@ export default function App() {
       const newPages = [];
       for (let i = 1; i <= numPages; i++) {
         const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 1.5 });
+        const viewport = page.getViewport({ scale: PDF_RENDER_SCALE });
         const canvas = document.createElement('canvas');
-        canvas.width = viewport.width; canvas.height = viewport.height;
-        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-        newPages.push(canvas.toDataURL('image/jpeg', 0.8));
+        canvas.width = Math.round(viewport.width);
+        canvas.height = Math.round(viewport.height);
+        // JPEG は透明を扱えない。白で塗ってから描かないと、背景が透明な
+        // PDF が黒くつぶれて出ることがある。
+        const ctx = canvas.getContext('2d', { alpha: false });
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        newPages.push(canvas.toDataURL('image/jpeg', 0.85));
+        // 大きなページを何十枚も続けて描くとメモリを使い切るため、
+        // 1枚ごとに描画用のピクセルを手放す（Chromebook のタブ破棄対策）。
+        canvas.width = 0; canvas.height = 0;
         page.cleanup();
       }
       pdf.destroy();
@@ -1518,7 +1000,6 @@ export default function App() {
       } catch (e) { console.error('ドライブ自動保存に失敗しました', e); }
     }, 4000); // 4秒デバウンス
     return () => { if (driveAutoSaveTimerRef.current) clearTimeout(driveAutoSaveTimerRef.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [textbooks, myStamps, historyTrigger, driveEnabled, driveAutoSave, driveConnected, isDataLoaded]);
 
   const deleteTextbook = (id, e) => {
@@ -1889,7 +1370,7 @@ export default function App() {
   };
 
   const addPresetStampToCanvas = useCallback((stamp) => {
-    let obj = null;
+    let obj;
     if (stamp.type === 'premium' && stamp.subtype) {
        obj = createPremiumStamp(stamp.subtype);
     } else if (stamp.type === 'math' && stamp.subtype) {
@@ -2142,6 +1623,21 @@ export default function App() {
     backNavigationRef.current();
   }, []);
 
+  // Esc でも「1階層だけ戻る」。
+  // マウスが使えない・使いにくい人はモーダルを閉じられずに詰んでしまうため、
+  // 画面のどこにいても効くように、ショートカット全体とは別に登録する。
+  useEffect(() => {
+    const onEscape = (e) => {
+      if (e.key !== 'Escape') return;
+      // 文字を入力している最中は、入力の取り消しが優先されるので邪魔しない
+      const t = e.target;
+      if (t && (['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.isContentEditable)) return;
+      requestBackNavigation();
+    };
+    window.addEventListener('keydown', onEscape);
+    return () => window.removeEventListener('keydown', onEscape);
+  }, [requestBackNavigation]);
+
   // 履歴に「戻り先」を1件積む(常に1件残しておくのが基本方針)
   const pushHistoryGuard = useCallback(() => {
     try { window.history.pushState({ dtBackGuard: true }, ''); } catch (e) {}
@@ -2326,8 +1822,8 @@ export default function App() {
           <AlertCircle size={48} className="text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-slate-800 mb-2">ライブラリの読み込みに失敗しました</h2>
           <p className="text-slate-600 text-sm mb-4">
-            インターネット接続を確認し、ページを再読み込みしてください。<br/>
-            学校のネットワーク制限でブロックされている可能性もあります。
+            通信が不安定なようです。少し待ってから、下のボタンで再読み込みしてください。<br />
+            何度やっても直らないときは、ネットワークの管理者にご相談ください。
           </p>
           <div className="bg-slate-100 p-3 rounded-lg text-left text-xs font-mono text-red-600 overflow-hidden mb-6">
             {scriptError}
@@ -2341,7 +1837,7 @@ export default function App() {
   }
 
   if (!scriptsLoaded || !isDataLoaded) {
-    return <div className="h-dvh w-full flex items-center justify-center bg-amber-50/40"><div className="flex flex-col items-center gap-4 text-amber-600"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-amber-500"></div><div className="text-xl font-bold animate-pulse">システムを準備中...</div></div></div>;
+    return <div className="h-dvh w-full flex items-center justify-center bg-amber-50/40"><div className="flex flex-col items-center gap-4 text-amber-700"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-amber-500"></div><div className="text-xl font-bold animate-pulse">システムを準備中...</div></div></div>;
   }
 
   // 全画面表示中はヘッダー・ツールバー・フッターを隠して学習領域を最大化する
@@ -2359,6 +1855,19 @@ export default function App() {
             <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
               <h2 className="text-3xl font-bold text-slate-800 flex items-center gap-3 drop-shadow-sm"><BookOpen size={36} className="text-amber-500" /> わたしのプリント・教科書</h2>
               <div className="flex flex-wrap items-center gap-2">
+                {/* アプリとして入れてもらうためのボタン。
+                    ブラウザのアドレスバーの小さなアイコンは児童には見つけられないので、
+                    アプリの中にはっきり置く。Chrome から合図が来たときだけ出す。 */}
+                {canInstall && (
+                  <button
+                    onClick={handleInstall}
+                    title="このアプリをホーム画面・デスクトップに追加します"
+                    className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm"
+                  >
+                    <Smartphone size={16} />
+                    アプリを入れる
+                  </button>
+                )}
                 <button
                   onClick={handleExportBackup}
                   disabled={isExporting || textbooks.length === 0}
@@ -2372,7 +1881,7 @@ export default function App() {
                   onClick={() => importFileInputRef.current && importFileInputRef.current.click()}
                   disabled={isProcessing}
                   title="Googleドライブ等から取得したバックアップJSONを読み込みます"
-                  className="flex items-center gap-1.5 bg-white border-2 border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50 text-emerald-600 font-bold px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="flex items-center gap-1.5 bg-white border-2 border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50 text-emerald-700 font-bold px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <Upload size={16} />
                   バックアップを取り込む
@@ -2396,10 +1905,10 @@ export default function App() {
                       <div className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
                         Googleドライブ同期
                         {driveConnected && (
-                          <span className="inline-flex items-center gap-0.5 text-[11px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full"><Check size={11} /> 接続中</span>
+                          <span className="inline-flex items-center gap-0.5 text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full"><Check size={11} /> 接続中</span>
                         )}
                       </div>
-                      <div className="text-[11px] font-bold text-slate-400">
+                      <div className="text-[11px] font-bold text-slate-600">
                         {driveLastSync ? `最終保存: ${driveLastSync}` : '別の端末でも同じGoogleアカウントで接続すれば同期できます'}
                       </div>
                     </div>
@@ -2409,7 +1918,7 @@ export default function App() {
                       <button
                         onClick={handleDriveConnect}
                         disabled={driveBusy !== null}
-                        className="flex items-center gap-1.5 bg-sky-500 hover:bg-sky-600 text-white font-bold px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="flex items-center gap-1.5 bg-sky-700 hover:bg-sky-800 text-white font-bold px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         {driveBusy === 'connecting' ? <Loader2 size={16} className="animate-spin" /> : <Cloud size={16} />}
                         Googleドライブに接続
@@ -2420,7 +1929,7 @@ export default function App() {
                           onClick={handleDriveSave}
                           disabled={driveBusy !== null || textbooks.length === 0}
                           title="いまのデータをGoogleドライブに保存します"
-                          className="flex items-center gap-1.5 bg-sky-500 hover:bg-sky-600 text-white font-bold px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                          className="flex items-center gap-1.5 bg-sky-700 hover:bg-sky-800 text-white font-bold px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                           {driveBusy === 'saving' ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
                           ドライブに保存
@@ -2438,7 +1947,7 @@ export default function App() {
                           onClick={handleDriveDisconnect}
                           disabled={driveBusy !== null}
                           title="接続を解除します"
-                          className="flex items-center gap-1 text-slate-400 hover:text-red-500 hover:bg-red-50 font-bold px-2.5 py-2 rounded-xl transition-all active:scale-95 text-xs disabled:opacity-40"
+                          className="flex items-center gap-1 text-slate-600 hover:text-red-500 hover:bg-red-50 font-bold px-2.5 py-2 rounded-xl transition-all active:scale-95 text-xs disabled:opacity-40"
                         >
                           <X size={14} /> 切断
                         </button>
@@ -2471,10 +1980,21 @@ export default function App() {
               {textbooks.map(tb => (
                 <div key={tb.id} onClick={() => { setCurrentTextbookId(tb.id); setCurrentPage(pageHistory[tb.id] || 0); setZoom(1); }} className="bg-white rounded-3xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group relative overflow-hidden flex flex-col border border-slate-100 min-h-[260px]">
                   <div className="h-44 bg-slate-100 relative border-b border-slate-100 flex items-center justify-center p-3 overflow-hidden">
-                    <img src={tb.coverImage} alt={tb.title} className="max-h-full max-w-full object-contain drop-shadow-md group-hover:scale-105 transition-transform duration-300" />
-                    <button onClick={(e) => deleteTextbook(tb.id, e)} className="absolute top-3 right-3 bg-white/90 backdrop-blur hover:bg-red-50 text-slate-400 hover:text-red-500 p-2.5 rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-md"><Trash2 size={20} /></button>
+                    {/* width/height を書いておかないと、表紙が出た瞬間に
+                        カードの高さが変わって一覧全体がガタつく（CLS）。
+                        実際の表示サイズは CSS 側で決まるので、ここは比率の指定として効く。 */}
+                    <img
+                      src={tb.coverImage}
+                      alt={`${tb.title} の表紙`}
+                      width="176"
+                      height="176"
+                      loading="lazy"
+                      decoding="async"
+                      className="max-h-full max-w-full object-contain drop-shadow-md group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <button onClick={(e) => deleteTextbook(tb.id, e)} aria-label={`「${tb.title}」を消す`} className="absolute top-3 right-3 bg-white/90 backdrop-blur hover:bg-red-50 text-slate-500 hover:text-red-600 p-2.5 rounded-full opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all shadow-md"><Trash2 size={20} /></button>
                   </div>
-                  <div className="p-5 bg-white flex-grow flex flex-col justify-between"><h3 className="font-bold text-slate-800 line-clamp-2 text-base leading-snug">{tb.title}</h3><div className="text-sm text-slate-400 font-bold mt-3 flex items-center gap-1.5"><BookOpen size={16} /> {tb.pages.length} ページ</div></div>
+                  <div className="p-5 bg-white flex-grow flex flex-col justify-between"><h3 className="font-bold text-slate-800 line-clamp-2 text-base leading-snug">{tb.title}</h3><div className="text-sm text-slate-600 font-bold mt-3 flex items-center gap-1.5"><BookOpen size={16} /> {tb.pages.length} ページ</div></div>
                 </div>
               ))}
             </div>
@@ -2491,14 +2011,14 @@ export default function App() {
               <button
                 onClick={goToLibrary}
                 title="一覧へ戻る"
-                className="flex items-center gap-1 text-sm font-bold text-slate-600 bg-white/90 backdrop-blur border border-slate-200 hover:bg-white hover:text-amber-600 px-2.5 sm:px-3 py-2 rounded-xl shadow-md transition-all active:scale-95"
+                className="flex items-center gap-1 text-sm font-bold text-slate-600 bg-white/90 backdrop-blur border border-slate-200 hover:bg-white hover:text-amber-700 px-2.5 sm:px-3 py-2 rounded-xl shadow-md transition-all active:scale-95"
               >
                 <ChevronLeft size={18} /> <span className="hidden sm:inline">一覧へ戻る</span>
               </button>
               <button
                 onClick={() => { closeAllMenus(); setShowToolbar(true); }}
                 title="ツールを表示"
-                className="flex items-center gap-1.5 text-sm font-bold text-white bg-amber-500 hover:bg-amber-600 px-3 py-2 rounded-xl shadow-md shadow-amber-500/30 transition-all active:scale-95"
+                className="flex items-center gap-1.5 text-sm font-bold text-white bg-amber-700 hover:bg-amber-800 px-3 py-2 rounded-xl shadow-md shadow-amber-800/30 transition-all active:scale-95"
               >
                 <PenTool size={18} /> <span>ツール</span>
               </button>
@@ -2511,7 +2031,7 @@ export default function App() {
             <div className="flex flex-wrap px-1.5 sm:px-4 py-1.5 sm:py-2 gap-y-1.5 gap-x-1.5 sm:gap-x-3 items-center mx-auto justify-center">
 
               {/* 一覧へ戻る */}
-              <button onClick={goToLibrary} title="一覧へ戻る" className="flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-amber-600 bg-slate-100 hover:bg-amber-50 px-2 sm:px-3 py-1.5 rounded-xl transition-all active:scale-95">
+              <button onClick={goToLibrary} title="一覧へ戻る" className="flex items-center gap-1 text-sm font-bold text-slate-600 hover:text-amber-700 bg-slate-100 hover:bg-amber-50 px-2 sm:px-3 py-1.5 rounded-xl transition-all active:scale-95">
                 <ChevronLeft size={18} /> <span className="hidden sm:inline">一覧へ戻る</span>
               </button>
 
@@ -2528,11 +2048,11 @@ export default function App() {
 
               {/* 描画・選択ツール */}
               <div className="flex bg-slate-100 rounded-xl p-1 gap-1 shadow-inner">
-                <button onClick={() => setMode('select')} className={`p-2 rounded-lg transition-all active:scale-95 ${mode === 'select' ? 'bg-white text-amber-600 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-200'}`} title="選択"><MousePointer2 size={20} /></button>
-                <button onClick={() => setMode('pencil')} className={`p-2 rounded-lg transition-all active:scale-95 ${mode === 'pencil' ? 'bg-white text-amber-600 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-200'}`} title="えんぴつ"><Pencil size={20} /></button>
-                <button onClick={() => setMode('highlighter')} className={`p-2 rounded-lg transition-all active:scale-95 ${mode === 'highlighter' ? 'bg-white text-amber-600 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-200'}`} title="マーカー"><Highlighter size={20} /></button>
-                <button onClick={() => setMode('eraser')} className={`p-2 rounded-lg transition-all active:scale-95 ${mode === 'eraser' ? 'bg-white text-amber-600 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-200'}`} title="けしごむ"><Eraser size={20} /></button>
-                <button onClick={() => setMode('qr')} className={`p-2 rounded-lg transition-all active:scale-95 ${mode === 'qr' ? 'bg-white text-amber-600 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-200'}`} title="QRコード読み取り"><QrCode size={20} /></button>
+                <button onClick={() => setMode('select')} className={`p-2 rounded-lg transition-all active:scale-95 ${mode === 'select' ? 'bg-white text-amber-700 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-200'}`} title="選択"><MousePointer2 size={20} /></button>
+                <button onClick={() => setMode('pencil')} className={`p-2 rounded-lg transition-all active:scale-95 ${mode === 'pencil' ? 'bg-white text-amber-700 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-200'}`} title="えんぴつ"><Pencil size={20} /></button>
+                <button onClick={() => setMode('highlighter')} className={`p-2 rounded-lg transition-all active:scale-95 ${mode === 'highlighter' ? 'bg-white text-amber-700 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-200'}`} title="マーカー"><Highlighter size={20} /></button>
+                <button onClick={() => setMode('eraser')} className={`p-2 rounded-lg transition-all active:scale-95 ${mode === 'eraser' ? 'bg-white text-amber-700 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-200'}`} title="けしごむ"><Eraser size={20} /></button>
+                <button onClick={() => setMode('qr')} className={`p-2 rounded-lg transition-all active:scale-95 ${mode === 'qr' ? 'bg-white text-amber-700 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-200'}`} title="QRコード読み取り"><QrCode size={20} /></button>
               </div>
 
               {/* カラーパレット */}
@@ -2553,7 +2073,7 @@ export default function App() {
                   {showShapeMenu && (
                     <div className="absolute top-full mt-2 left-0 bg-white border border-slate-200 p-2 rounded-xl shadow-xl z-50 flex gap-2 animate-in fade-in slide-in-from-top-2">
                       {['rect', 'circle', 'line', 'arrow'].map(m => (
-                        <button key={m} onClick={() => { setMode(m); setShowShapeMenu(false); }} className={`p-2.5 rounded-lg transition-colors ${mode === m ? 'bg-amber-100 text-amber-600' : 'text-slate-600 hover:bg-slate-100'}`}>
+                        <button key={m} onClick={() => { setMode(m); setShowShapeMenu(false); }} className={`p-2.5 rounded-lg transition-colors ${mode === m ? 'bg-amber-100 text-amber-700' : 'text-slate-600 hover:bg-slate-100'}`}>
                           {m === 'rect' && <Square size={20}/>}{m === 'circle' && <Circle size={20}/>}{m === 'line' && <Minus size={20}/>}{m === 'arrow' && <ArrowRight size={20}/>}
                         </button>
                       ))}
@@ -2596,7 +2116,7 @@ export default function App() {
                     <div className="fixed sm:absolute top-auto sm:top-full left-1/2 sm:left-auto -translate-x-1/2 sm:translate-x-0 bottom-4 sm:bottom-auto sm:mt-2 sm:right-0 xl:left-0 xl:right-auto bg-white border border-slate-200 p-4 rounded-2xl shadow-2xl z-50 w-[min(20rem,calc(100vw-1.5rem))] animate-in fade-in slide-in-from-top-2">
                       <div className="flex bg-slate-100 p-1 rounded-xl mb-3 shadow-inner overflow-x-auto hide-scrollbar">
                         {STAMP_CATEGORIES.map(cat => (
-                          <button key={cat.id} onClick={() => setStampTab(cat.id)} className={`flex-shrink-0 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${stampTab === cat.id ? 'bg-white shadow-sm text-amber-600' : 'text-slate-500 hover:text-slate-700'}`}>
+                          <button key={cat.id} onClick={() => setStampTab(cat.id)} className={`flex-shrink-0 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${stampTab === cat.id ? 'bg-white shadow-sm text-amber-700' : 'text-slate-600 hover:text-slate-800'}`}>
                             {cat.name}
                           </button>
                         ))}
@@ -2616,7 +2136,7 @@ export default function App() {
                         ))}
                         {stampTab === 'my' && (
                           <>
-                            <button onClick={() => {setShowStampMenu(false); setShowMyStampCreator(true);}} className="col-span-4 py-3 border-2 border-dashed border-amber-300 rounded-xl text-amber-600 font-bold text-sm hover:bg-amber-50 flex items-center justify-center gap-1 mb-2 transition-colors">
+                            <button onClick={() => {setShowStampMenu(false); setShowMyStampCreator(true);}} className="col-span-4 py-3 border-2 border-dashed border-amber-300 rounded-xl text-amber-700 font-bold text-sm hover:bg-amber-50 flex items-center justify-center gap-1 mb-2 transition-colors">
                               <Plus size={16}/> 新しいスタンプを作る
                             </button>
                             {myStamps.map((stamp, idx) => (
@@ -2648,7 +2168,7 @@ export default function App() {
                       <span className="flex items-center gap-2"><BookOpen size={16} className="text-amber-500"/> ページ全体を表示</span>
                       {viewMode === 'full' && <Check size={16} className="text-amber-500 shrink-0"/>}
                     </button>
-                    <div className="text-[10px] font-bold text-slate-400 px-2 pt-1">半ページ表示 (縦向きの画面におすすめ)</div>
+                    <div className="text-[10px] font-bold text-slate-600 px-2 pt-1">半ページ表示 (縦向きの画面におすすめ)</div>
                     <button onClick={() => selectViewMode('half', 'ltr')} className="flex items-center justify-between gap-2 p-2.5 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 transition-colors text-left">
                       <span className="flex items-center gap-2"><Columns size={16} className="text-blue-500"/> 左半分から読む</span>
                       {viewMode === 'half' && halfOrder === 'ltr' && <Check size={16} className="text-amber-500 shrink-0"/>}
@@ -2676,14 +2196,14 @@ export default function App() {
               <div className="w-px h-8 bg-slate-300 rounded-full hidden lg:block"></div>
 
               {/* 共有ボタン */}
-              <button onClick={startHosting} title="共有する" className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-bold px-2.5 sm:px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-md shadow-emerald-500/30">
+              <button onClick={startHosting} title="共有する" className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-800 hover:to-teal-800 text-white font-bold px-2.5 sm:px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-md shadow-emerald-800/30">
                 <Share2 size={16} /> <span className="hidden md:inline">共有する</span>
               </button>
 
               <div className="w-px h-8 bg-slate-300 rounded-full hidden lg:block"></div>
 
               {/* ショートカットヘルプ */}
-              <button onClick={() => setShowShortcuts(true)} className="flex items-center justify-center p-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-slate-700 rounded-xl transition-all active:scale-95 shadow-sm" title="ショートカットキー (?)">
+              <button onClick={() => setShowShortcuts(true)} className="flex items-center justify-center p-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-slate-800 rounded-xl transition-all active:scale-95 shadow-sm" title="ショートカットキー (?)">
                 <Info size={18} />
               </button>
 
@@ -2704,7 +2224,10 @@ export default function App() {
               スクロール領域内のラッパーへ「拡大後の実サイズ」を明示的に与える
               (transform だけではレイアウト上のサイズが変わらず、端が見切れてしまうため)
             */}
-            <div ref={canvasScrollRef} className="absolute inset-0 overflow-auto flex" onClick={closeAllMenus}>
+            {/* print-target … 印刷時はこの中身だけを紙に流し込む
+                canvas-area   … 手書きの最中に画面そのものが動かないようにする
+                scroll-area   … 引っぱり更新が暴発しないようにする */}
+            <div ref={canvasScrollRef} className="absolute inset-0 overflow-auto flex print-target canvas-area scroll-area" onClick={closeAllMenus}>
               <div className="m-auto p-3">
                 {/*
                   半ページ表示: キャンバス自体は常にページ全体を保持したまま、
@@ -2734,15 +2257,23 @@ export default function App() {
 
             {showTimer && <TimerPanel onClose={() => setShowTimer(false)} />}
             
-            {/* ページナビゲーション (Floating) */}
-            <div className="absolute bottom-3 sm:bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-slate-800/80 backdrop-blur-md text-white rounded-full px-3 sm:px-4 py-1.5 sm:py-2 shadow-lg z-20 animate-in slide-in-from-bottom-5">
-              <button onClick={() => changePage(-1)} disabled={!canGoPrev} className="p-1 hover:text-amber-400 disabled:opacity-30 transition-colors"><ChevronLeft size={24} /></button>
-              
+            {/* ページナビゲーション (Floating)
+                bottom に safe-area を足すのは、iPhone のホームバーに
+                「次のページ」ボタンが隠れて押せなくなるのを防ぐため。 */}
+            <div
+              className="no-print absolute left-1/2 -translate-x-1/2 flex items-center gap-2 bg-slate-800/80 backdrop-blur-md text-white rounded-full px-3 sm:px-4 py-1.5 sm:py-2 shadow-lg z-20 animate-in slide-in-from-bottom-5"
+              style={{ bottom: 'calc(0.75rem + var(--safe-b))' }}
+            >
+              <button onClick={() => changePage(-1)} disabled={!canGoPrev} aria-label="まえのページ" className="p-1 hover:text-amber-400 disabled:opacity-30 transition-colors"><ChevronLeft size={24} /></button>
+
               <div className="relative flex items-center justify-center">
-                <button 
-                  onClick={(e) => { e.stopPropagation(); closeAllMenus(); setShowPageJump(!showPageJump); }} 
+                <button
+                  onClick={(e) => { e.stopPropagation(); closeAllMenus(); setShowPageJump(!showPageJump); }}
                   className="font-bold w-16 text-center tracking-widest hover:text-amber-400 transition-colors"
                   title="ページを移動"
+                  aria-label={`ページを移動 (いま ${currentPage + 1} / ${currentPages.length} ページ)`}
+                  aria-haspopup="dialog"
+                  aria-expanded={showPageJump}
                 >
                   {currentPage + 1} / {currentPages.length}
                 </button>
@@ -2783,24 +2314,46 @@ export default function App() {
                 </div>
               )}
 
-              <button onClick={() => changePage(1)} disabled={!canGoNext} className="p-1 hover:text-amber-400 disabled:opacity-30 transition-colors"><ChevronRight size={24} /></button>
+              <button onClick={() => changePage(1)} disabled={!canGoNext} aria-label="つぎのページ" className="p-1 hover:text-amber-400 disabled:opacity-30 transition-colors"><ChevronRight size={24} /></button>
             </div>
 
             {/* ズーム＆クリア (Floating Right) */}
             {/* 全画面表示中の終了ボタン (ヘッダー類が隠れるため常に見える位置に置く) */}
             {hideChrome && (
-              <button onClick={toggleFullscreen} title="全画面を終了 (F)" className="absolute top-3 right-3 z-30 p-3 bg-slate-800/70 hover:bg-slate-800/90 backdrop-blur-md text-white rounded-full shadow-lg transition-all active:scale-95 animate-in fade-in">
+              <button onClick={toggleFullscreen} title="全画面を終了 (F)" aria-label="全画面を終了" className="no-print absolute top-3 right-3 z-30 p-3 bg-slate-800/70 hover:bg-slate-800/90 backdrop-blur-md text-white rounded-full shadow-lg transition-all active:scale-95 animate-in fade-in">
                 <Minimize size={20} />
               </button>
             )}
 
-            <div className="absolute bottom-3 right-3 sm:bottom-6 sm:right-6 flex flex-col gap-2 sm:gap-3 z-20">
+            <div
+              className="no-print absolute right-3 sm:right-6 flex flex-col gap-2 sm:gap-3 z-20"
+              style={{ bottom: 'calc(0.75rem + var(--safe-b))' }}
+            >
               <div className="flex flex-col bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
-                <button onClick={() => setZoom(Math.min(3, zoom + 0.2))} className="p-2.5 sm:p-3 text-slate-600 hover:bg-slate-50 hover:text-amber-600 transition-colors border-b border-slate-100"><ZoomIn size={20} /></button>
-                <div className="py-1 text-center font-bold text-xs text-slate-400 bg-slate-50">{Math.round(zoom * 100)}%</div>
-                <button onClick={() => setZoom(Math.max(0.5, zoom - 0.2))} className="p-2.5 sm:p-3 text-slate-600 hover:bg-slate-50 hover:text-amber-600 transition-colors border-t border-slate-100"><ZoomOut size={20} /></button>
+                <button onClick={() => setZoom(Math.min(3, zoom + 0.2))} aria-label="大きくする" className="p-2.5 sm:p-3 text-slate-600 hover:bg-slate-50 hover:text-amber-700 transition-colors border-b border-slate-100"><ZoomIn size={20} /></button>
+                <div className="py-1 text-center font-bold text-xs text-slate-500 bg-slate-50" aria-live="polite">{Math.round(zoom * 100)}%</div>
+                <button onClick={() => setZoom(Math.max(0.5, zoom - 0.2))} aria-label="小さくする" className="p-2.5 sm:p-3 text-slate-600 hover:bg-slate-50 hover:text-amber-700 transition-colors border-t border-slate-100"><ZoomOut size={20} /></button>
               </div>
-              <button onClick={clearCurrentPage} className="p-3 sm:p-4 bg-white border border-red-200 text-red-500 hover:bg-red-50 rounded-xl shadow-lg transition-all active:scale-95 group">
+              {/* 提示モード … 電子黒板で一斉授業に使うとき、教室の後ろから読める大きさにする */}
+              <button
+                onClick={() => setIsPresentation(v => !v)}
+                title={isPresentation ? "提示モードを終わる" : "大きく表示（電子黒板用）"}
+                aria-label={isPresentation ? "提示モードを終わる" : "大きく表示（電子黒板用）"}
+                aria-pressed={isPresentation}
+                className={`p-3 sm:p-4 rounded-xl shadow-lg transition-all active:scale-95 border ${isPresentation ? 'bg-amber-500 border-amber-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+              >
+                <Presentation size={22} />
+              </button>
+              {/* 印刷 … 書き込んだページを紙で配るのは、この種のアプリの本質機能 */}
+              <button
+                onClick={handlePrint}
+                title="このページを印刷する"
+                aria-label="このページを印刷する"
+                className="p-3 sm:p-4 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-amber-700 rounded-xl shadow-lg transition-all active:scale-95"
+              >
+                <Printer size={22} />
+              </button>
+              <button onClick={clearCurrentPage} aria-label="このページの書き込みをすべて消す" className="p-3 sm:p-4 bg-white border border-red-200 text-red-600 hover:bg-red-50 rounded-xl shadow-lg transition-all active:scale-95 group">
                 <Trash2 size={22} className="group-hover:scale-110 transition-transform" />
               </button>
             </div>
@@ -2812,9 +2365,9 @@ export default function App() {
 
       {/* P2P ホスティング（共有元）モーダル */}
       {shareMode === 'hosting' && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[500] p-4 animate-in fade-in">
+        <div role="dialog" aria-modal="true" aria-label="データを共有する" className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[500] p-4 animate-in fade-in">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 md:p-8 text-center animate-in zoom-in-95">
-            <div className="mx-auto bg-emerald-100 text-emerald-600 w-12 h-12 rounded-full flex items-center justify-center mb-3">
+            <div className="mx-auto bg-emerald-100 text-emerald-700 w-12 h-12 rounded-full flex items-center justify-center mb-3">
               <Share2 size={24} />
             </div>
             <h3 className="font-bold text-xl mb-2 text-slate-800">デジタル教科書を共有</h3>
@@ -2834,13 +2387,13 @@ export default function App() {
                   <input type="text" readOnly value={shareUrl} className="flex-1 bg-transparent border-none outline-none text-slate-600 text-xs font-mono px-2" />
                   <button 
                     onClick={() => { navigator.clipboard.writeText(shareUrl); showToast("URLをコピーしました！", "success"); }}
-                    className="p-2 bg-white rounded-lg shadow-sm text-emerald-600 hover:bg-emerald-50 transition-colors flex-shrink-0"
+                    className="p-2 bg-white rounded-lg shadow-sm text-emerald-700 hover:bg-emerald-50 transition-colors flex-shrink-0"
                     title="URLをコピー"
                   >
                     <Copy size={18} />
                   </button>
                 </div>
-                <div className="text-xs font-bold text-emerald-600 bg-emerald-50 py-2 px-4 rounded-full inline-block mb-6 animate-pulse">
+                <div className="text-xs font-bold text-emerald-700 bg-emerald-50 py-2 px-4 rounded-full inline-block mb-6 animate-pulse">
                   {shareStatus}
                 </div>
               </>
@@ -2860,7 +2413,7 @@ export default function App() {
 
       {/* P2P 受信中モーダル */}
       {shareMode === 'receiving' && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[500] p-4 animate-in fade-in">
+        <div role="dialog" aria-modal="true" aria-label="データを受信しています" className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[500] p-4 animate-in fade-in">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 text-center flex flex-col items-center">
              <Loader2 className="animate-spin text-emerald-500 mb-4" size={48} />
              <h3 className="font-bold text-xl mb-2 text-slate-800">データを受信しています</h3>
@@ -2871,13 +2424,13 @@ export default function App() {
 
       {/* ショートカットキーモーダル */}
       {showShortcuts && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[600] p-4 animate-in fade-in" onClick={() => setShowShortcuts(false)}>
+        <div role="dialog" aria-modal="true" aria-label="ショートカットキー" className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[600] p-4 animate-in fade-in" onClick={() => setShowShortcuts(false)}>
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90dvh] flex flex-col animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
               <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2">
                 <Info className="text-amber-500"/> ショートカットキー
               </h3>
-              <button onClick={() => setShowShortcuts(false)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
+              <button onClick={() => setShowShortcuts(false)} className="p-2 text-slate-600 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
                 <X size={20}/>
               </button>
             </div>
@@ -2945,7 +2498,7 @@ export default function App() {
                   <li>選択モードのとき、教科書の上を左へスワイプで次のページ</li>
                   <li>同じく、右へスワイプで前のページ</li>
                 </ul>
-                <p className="text-[11px] font-bold text-slate-400 mt-2 leading-relaxed">
+                <p className="text-[11px] font-bold text-slate-600 mt-2 leading-relaxed">
                   えんぴつなどの書き込み中は、書き込みを優先するためスワイプでのページ送りは働きません。
                   拡大して画面からはみ出しているときも、スクロールを優先します。
                 </p>
@@ -2960,7 +2513,7 @@ export default function App() {
                   <li>画面下のナビゲーションバーの「戻る」をタップ</li>
                   <li>画面の左右どちらかの端から、中央に向かってスワイプ</li>
                 </ul>
-                <p className="text-[11px] font-bold text-slate-400 mt-2 leading-relaxed">
+                <p className="text-[11px] font-bold text-slate-600 mt-2 leading-relaxed">
                   開いているメニュー → 全画面表示 → 教科書の画面 → 一覧 の順に、1つずつ戻ります。
                   アプリが終了したり、ブラウザで別のページへ移動したりすることはありません。
                 </p>
@@ -2975,11 +2528,11 @@ export default function App() {
 
       {/* バックアップ取り込み確認モーダル */}
       {importPreview && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[400] p-4 animate-in fade-in">
+        <div role="dialog" aria-modal="true" aria-label="バックアップを取り込む" className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[400] p-4 animate-in fade-in">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95">
             <div className="p-6 md:p-7 border-b border-slate-100 bg-slate-50">
               <h3 className="font-bold text-xl mb-1 text-slate-800 flex items-center gap-2">
-                <Upload size={20} className="text-emerald-600" /> バックアップを取り込む
+                <Upload size={20} className="text-emerald-700" /> バックアップを取り込む
               </h3>
               <p className="text-xs font-bold text-slate-500 truncate" title={importPreview.fileName}>
                 {importPreview.fileName}
@@ -2994,7 +2547,7 @@ export default function App() {
               </div>
               <p className="text-xs font-bold text-slate-500 leading-relaxed mb-1">取り込み方法を選んでください。</p>
               <ul className="text-xs font-bold text-slate-500 leading-relaxed list-disc pl-5 mb-2">
-                <li><span className="text-emerald-600">追加で取り込む</span>: 今ある教科書はそのまま残ります（推奨）</li>
+                <li><span className="text-emerald-700">追加で取り込む</span>: 今ある教科書はそのまま残ります（推奨）</li>
                 <li><span className="text-red-500">置き換える</span>: 現在のすべての教科書・書き込みが消えます</li>
               </ul>
             </div>
@@ -3022,7 +2575,7 @@ export default function App() {
               <button
                 onClick={() => applyImport('merge')}
                 disabled={isProcessing}
-                className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 font-bold text-white rounded-xl transition-all shadow-md shadow-emerald-500/30 disabled:opacity-40 flex items-center gap-2"
+                className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 font-bold text-white rounded-xl transition-all shadow-md shadow-emerald-800/30 disabled:opacity-40 flex items-center gap-2"
               >
                 {isProcessing ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
                 追加で取り込む
@@ -3034,7 +2587,7 @@ export default function App() {
 
       {/* マイスタンプ作成モーダル */}
       {showMyStampCreator && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[200] p-4 animate-in fade-in">
+        <div role="dialog" aria-modal="true" aria-label="マイスタンプを作る" className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[200] p-4 animate-in fade-in">
            <form onSubmit={(e) => {
              e.preventDefault();
              const t = e.target.stampText.value, c = e.target.stampColor.value, s = e.target.stampShape.value;
@@ -3066,7 +2619,7 @@ export default function App() {
               </div>
               <div className="flex gap-3 justify-end mt-2">
                 <button type="button" onClick={() => setShowMyStampCreator(false)} className="px-5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 font-bold text-slate-600 rounded-xl transition-all">キャンセル</button>
-                <button type="submit" className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 font-bold text-white rounded-xl transition-all shadow-md shadow-amber-500/30">保存して追加</button>
+                <button type="submit" className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 font-bold text-white rounded-xl transition-all shadow-md shadow-amber-800/30">保存して追加</button>
               </div>
            </form>
         </div>
@@ -3074,7 +2627,7 @@ export default function App() {
 
       {/* カスタム確認ダイアログ */}
       {dialog && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[300] p-4 animate-in fade-in duration-200">
+        <div role="dialog" aria-modal="true" aria-label="かくにん" className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[300] p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="p-6 md:p-8">
               <h3 className="font-bold text-xl mb-3 text-slate-800 flex items-center gap-2">
@@ -3095,7 +2648,14 @@ export default function App() {
 
       {/* カスタムトースト通知 */}
       {toast && (
-        <div className={`fixed bottom-6 right-6 md:bottom-10 md:right-10 px-5 py-3.5 rounded-2xl shadow-xl font-bold flex items-center gap-3 animate-in slide-in-from-bottom-5 z-[400] ${toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-slate-800 text-white'}`}>
+        // 保存できた・失敗したといった状態の変化は、画面を見ていない人にも
+        // 伝わるよう読み上げてもらう。読み上げ中の操作は妨げない polite にする。
+        <div
+          role="status"
+          aria-live="polite"
+          className={`no-print fixed right-6 md:right-10 px-5 py-3.5 rounded-2xl shadow-xl font-bold flex items-center gap-3 animate-in slide-in-from-bottom-5 z-[400] ${toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-slate-800 text-white'}`}
+          style={{ bottom: 'calc(1.5rem + var(--safe-b))' }}
+        >
           {toast.type === 'error'
             ? <AlertCircle size={20}/>
             : toast.type === 'info'

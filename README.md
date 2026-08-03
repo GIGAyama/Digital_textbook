@@ -91,6 +91,35 @@ PDFファイルをブラウザに読み込ませるだけで、ペンやマー�
     
 *   **PWA / Offline**: vite-plugin-pwa (Workbox)
     
+*   **外部ライブラリの配信**: 自己ホスト（`public/vendor/`。`scripts/sync-vendor.mjs` が npm から生成）
+    
+
+## 📁 ディレクトリ構成
+
+```
+index.html                    CSP・PWAメタ・インストール合図の受け取り
+src/App.jsx                   アプリ本体（約3,200行）
+src/main.jsx                  起動と、更新のお知らせ
+src/index.css                 Part I 準拠の共通スタイル（safe-area / fluid type /
+                              提示モード / 印刷 / reduced-motion）
+public/vendor/                自己ホストする外部ライブラリ（git 管理外・自動生成）
+public/offline.html           圏外時の案内
+public/pwa-install-hook.js    beforeinstallprompt を最速で受け取る
+scripts/sync-vendor.mjs       node_modules → public/vendor/
+scripts/optimize-icons.mjs    アイコンの圧縮とサイズ生成
+scripts/check-project.mjs     品質ゲート
+quality.config.json           品質ゲートの設定
+.assets-original/             圧縮前のアイコン原本（git 管理外）
+AUDIT.md                      GIGA Standard v4 の監査記録
+MANUAL.md                     先生向けマニュアル
+```
+
+> **`src/App.jsx` の分割について**
+> 約 3,200 行の単一ファイルです（基準の 5,000 行 / 400KB 以内には収まっています）。
+> 保守性の観点では `src/features/`（`textbook` / `canvas` / `share` / `drive` / `stamps`）
+> への分割が望ましいものの、状態が広く共有されているため機械的に切ると壊れます。
+> **1 機能ずつ、合意のうえで分けることを提案します。** 今回の改修では手を付けていません。
+
 
 ## 🚀 セットアップ・起動方法
 
@@ -120,7 +149,33 @@ PDFファイルをブラウザに読み込ませるだけで、ペンやマー�
 4.  ブラウザで `http://localhost:5173` にアクセスします。
     
 
-*(※本コードはCDNを利用して外部ライブラリを読み込む構成になっているため、インターネット接続環境下での初回ロードが必要です。)*
+> **外部ライブラリについて**
+> pdf.js / fabric.js / idb-keyval / jsQR / PeerJS / qrcode は npm でバージョンを固定し、`scripts/sync-vendor.mjs` が `public/vendor/` へ展開します（`npm run dev` / `npm run build` の前に自動で走ります）。合計約 2MB あるため git にはコミットしていません。`npm ci` を実行すれば再現されます。
+> 以前は cdnjs / jsDelivr から実行時に読み込んでいましたが、`integrity` が無く配信元の改ざんを検知できないこと、学校のフィルタリングが CDN を塞ぐと起動できないこと、CSP を厳しくできないことから、自己ホストに切り替えました。
+
+### 📦 リリース手順
+
+1.  変更をコミットし、`main` にマージします。
+2.  `package.json` の `version` を上げます（例 `1.0.0` → `1.1.0`）。
+    Service Worker のキャッシュは Workbox が各ファイルのハッシュで管理するため、
+    ビルドし直せば自動的に新しい版が配られます。`version` は
+    「どの版が配布されているか」を人間が追うためのものです。
+3.  `main` への push で `.github/workflows/deploy.yml` が動き、GitHub Pages へ反映されます。
+4.  反映後、実機で次を確認します。
+    - 「あたらしい バージョンが あります」の帯が出て、押すと新しい版になる
+    - DevTools の Application タブで manifest が読め、インストール可能と表示される
+    - オフラインにして再読み込みしても起動する
+
+### 🧪 品質ゲート
+
+```
+npm run check
+```
+
+Part I（表示・PWA・セキュリティ・性能）の要件を機械的に検査します。
+CI でも `npm run build` の前に実行されます。検査項目と、意図的に許可している
+例外は `quality.config.json` に定義しています。
+**検査に落ちたときは、検査をゆるめるのではなく `securityExceptions` に理由を書いて明示的に許可してください。**
 
 ## 🔐 セキュリティとプライバシーについて
 
@@ -130,6 +185,50 @@ PDFファイルをブラウザに読み込ませるだけで、ペンやマー�
     
 *   共有機能（P2P通信）を利用する際のシグナリング（接続先の仲介）にのみPeerJSのパブリックサーバーを使用しますが、実際のデータ通信は端末間で直接（エンドツーエンド暗号化で）行われます。
     
+
+### 信頼境界と CSP
+
+サーバーを持たない設計のため、守るべき境界は「このアプリが何を読み込み、どこへ送るか」の一点に集約されます。`index.html` の `Content-Security-Policy` で、そこを明示的に絞っています。
+
+| 種別 | 許可している先 | 理由 |
+|---|---|---|
+| `script-src` | `'self'` / `https://accounts.google.com` | ライブラリは全て自己ホスト。外部スクリプトは Google ドライブ連携のログイン部品のみ |
+| `connect-src` | `'self'` / `https://www.googleapis.com` / `https://accounts.google.com` / `https://0.peerjs.com`（`wss:` 含む） | ドライブ API と P2P のシグナリングのみ。ワイルドカードは使っていない |
+| `style-src` | `'self'` / `'unsafe-inline'` / `https://fonts.googleapis.com` | React と fabric.js が要素へ直接 `style` を書き込むため `'unsafe-inline'` は外せない |
+| `font-src` | `'self'` / `https://fonts.gstatic.com` | 下記「日本語フォント」を参照 |
+| `media-src` | `'self'` / `https:` / `data:` / `blob:` | 先生が貼り付けた音声ファイルの URL を再生する機能があるため |
+| `object-src` | `'none'` | プラグインは一切使わない |
+
+**日本語フォントを自己ホストしていない理由**：Zen Maru Gothic は Google Fonts 側で `unicode-range` により約 120 個に分割配信されており、ブラウザは実際に使う数個（各 20KB 前後）だけを取得します。全字形を自前で持つと数 MB になり、逆にサブセットを切ると児童が入力した漢字が豆腐（□）になる恐れがあります。分割配信の仕組みに任せるのが最も安全と判断し、`font-src` / `style-src` で 2 ホストだけを許可しています。フォントが取得できない環境では、端末に入っている丸ゴシック系へ自動的にフォールバックします。
+
+### OAuth スコープ
+
+Google ドライブ連携で要求するのは `https://www.googleapis.com/auth/drive.file` のみです。これは **このアプリが作成したファイルにしかアクセスできない** スコープで、`auth/drive`（ドライブ全体）は要求していません。
+
+なお `VITE_GOOGLE_CLIENT_ID` に入れる **OAuth クライアント ID は秘密の鍵ではありません**。Web 向けのクライアント ID はどのみちブラウザの通信に現れる公開の識別子で、これを知られてもデータは読めません。なりすましを防いでいるのは Google Cloud 側の **「承認済みの JavaScript 生成元」** の設定です。公開先ドメインを必ず登録してください（→ [GOOGLE_DRIVE_SETUP.md](./GOOGLE_DRIVE_SETUP.md)）。一方 **クライアントシークレットは本物の鍵**なので、このアプリでは使用せず、リポジトリにも置かないでください。
+
+## ⚠️ 制限とクォータ
+
+| 項目 | 制限 | 超えるとどうなるか |
+|---|---|---|
+| 端末内の保存容量 | ブラウザが割り当てる IndexedDB の枠（Chrome は概ね空きディスクの 60%） | 保存に失敗し、書き込みが残らない |
+| PDF 1 冊のページ数 | 実用上 300 ページ程度 | メモリ4GBの Chromebook では取り込み中にタブが破棄されることがある |
+| 1 ページの解像度 | 取り込み時に `PDF_RENDER_SCALE = 2`（A4 で 1190×1684px、JPEG 品質 0.85） | 上げると鮮明になるが、保存容量と P2P 配布時間が増える |
+| P2P の同時配布 | 実用上 10 端末程度 | シグナリングが詰まり、接続に失敗する端末が出る |
+| PeerJS シグナリング | 公開サーバー（`0.peerjs.com`）の無償枠 | 混雑時は接続に失敗する。データ本体は経由しない |
+| Google ドライブ API | Google の無償クォータ | 保存・復元が一時的に失敗する。時間を置けば回復する |
+| iOS Safari の ITP | ホーム画面に未追加だと 7 日で保存データが削除される | 書き込みが消える（→ MANUAL.md の「アプリとして入れる」） |
+
+## 📲 PWA について
+
+*   `manifest.webmanifest` の `id` / `scope` / `start_url` は、すべて `/Digital_textbook/` の絶対パスに固定しています。
+    `gigayama.github.io` は多数のアプリが同一オリジンを共有しているため、ここがずれると別アプリと取り違えられ、「開いたら違うアプリが立ち上がる」事故が起きます。
+    **このリポジトリをコピーして新しいアプリを作るときは、`vite.config.js` の `BASE` を最初に書き換えてください。**
+*   Service Worker は Workbox（`vite-plugin-pwa`）が生成します。`localStorage` には一切触れません。キャッシュの掃除も Workbox が自分の管理下のものだけを対象にするため、同一オリジンの他アプリを壊しません。
+*   `public/vendor/`（約 2MB）は先読みキャッシュから除外し、実際に使う時点で取得して以後キャッシュします。ここを先読みに入れると、40 人が同時に開く校内 Wi-Fi で初回表示が止まります。
+*   更新は `registerType: 'prompt'` です。新しい版が用意できると「あたらしい バージョンが あります」の帯が出て、押してもらってから切り替えます。書き込みの途中で黙ってリロードされるのを避けるためです。
+*   `offline.html` を同梱しています。圏外でも「壊れた」と思わせない案内を、アプリと同じ配色・フォントで表示します。
+*   iOS Safari には `beforeinstallprompt` がありません。「共有 → ホーム画面に追加」の手順は MANUAL.md に記載しています。
 
 ## ⌨️ キーボードショートカット
 
