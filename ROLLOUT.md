@@ -222,38 +222,47 @@ manifest を目で見るだけでは気づけない（`src` が同じファイ�
 **画素を数えること。** 判定は Digital_textbook の
 `scripts/make-maskable.mjs` の検査部分がそのまま使える。
 
-### 18. 「Service Worker が書いてある」と「動いている」は別のこと
+### 18. Service Worker の登録を React の effect に移すと、黙って登録されなくなる
 
-`Homework_barcordreader` の `public/sw.js` は正しく書かれていた。
-それでも**オフライン対応は入っていなかった**。登録側がこうなっていたため。
+`Homework_barcordreader` を直しているとき、自分で入れた退行で気づいた。
+**元のコードは正しく動いていた。** 実測で確かめた3通りの結果がこれ。
+
+| 登録を書いた場所 | 登録される |
+|---|---|
+| `main.jsx` の一番外側（元のコード）で `load` を待つ | ✅ される |
+| React の `useEffect` の中で `load` を待つ | ❌ **されない** |
+| React の `useEffect` の中で `readyState` を見てから待つ | ✅ される |
 
 ```js
-// src/main.jsx
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+// これは動く。module script は load より前に走るので、リスナーが間に合う。
+window.addEventListener('load', () => { navigator.serviceWorker.register(...) });
+
+// これは動かない。effect は描画のあとに走り、そのとき load は終わっている。
+useEffect(() => {
   window.addEventListener('load', () => { navigator.serviceWorker.register(...) });
-}
+}, []);
 ```
 
-`main.jsx` はモジュールとして読み込まれ、React の初回描画のあとに走る。
-そのときには `load` がすでに発火し終わっていることがあり、**登録関数が一度も呼ばれない。**
+登録と「あたらしい版があります」の案内は一体で扱いたくなるので、
+**登録を React 側へ持っていく改修は自然に発生する。** そのとき静かに壊れる。
 
-```
-"ServiceWorker": { "登録": false }, "キャッシュ一覧": []
-```
-
-**`sw.js` を読むだけでは絶対に分からない。** ブラウザに登録状態を問い合わせて初めて出た。
+必ずこう書く。
 
 ```js
 if (document.readyState === 'complete') start();
 else window.addEventListener('load', start, { once: true });
 ```
 
-**この形は他リポジトリにも多い。sw.js の中身だけでなく、必ず登録側も見ること。**
-判定は1行で済む。
+**そして、直したあとに必ずブラウザへ問い合わせて確かめること。**
+ビルドは通るし、`sw.js` を読んでも分からない。
 
-```bash
-grep -rn "addEventListener('load'" $(git ls-files 'src/main.*' '*.html')
+```js
+const reg = await navigator.serviceWorker.getRegistration();  // ← これだけ
 ```
+
+なお `addEventListener('load'` で Service Worker を登録している形は
+53リポジトリ中 21本にあるが、**いずれも読み込み直後に走る位置にあるので問題ない。**
+危ないのは「あとから走るところへ移したとき」だけ。
 
 ### 19. Tailwind v4 は色を `oklch()` で書く。コントラスト計測が壊れる
 
