@@ -9,6 +9,8 @@
 | Reflection_Journal | C+ | ✅ | ✅ | ✅ | 🔜 | — | 第1群。docs/ のみ。**同じ sw.js の不具合**＋maskable がセーフゾーンの 91.64% を侵していた問題を修正。GAS 本体は scriptId 待ち |
 | Homework_barcordreader | B | ✅ | ✅ | ✅ | ✅ | ✅ | 第1群。**完了・マージ済み**（#19 / #28）。コントラスト63→0件、タップ42→0件、画像 493→100KB、offline.html、更新通知、CSP |
 | PhysicalEducation_note | C | ✅ | ✅ | — | ✅ | — | 第1群。**ふりがなが青いボタンの上で比 1.28**（低学年ほど読めない）。Bootstrap 既定色 4件も基準未満。CDN 4本に SRI＋版固定。OAuth スコープは提案のみ（PR #1・未マージ） |
+| Ice_slide-puzzle | A | ✅ | ✅ | ✅ | ✅ | — | **完了・マージ済み**（#3）。拡大禁止を解除、黄色の上の白文字 1.53、画像 1321→44KB、CSP でゲームが止まったので本体を app.js へ切り出し |
+| Digital-Newspaper | C | ✅ | ✅ | — | ✅ | — | 第1群。**送信ボタンのふりがなが比 1.47**。5件→0件（PR #1・未マージ） |
 
 ## Digital_textbook でやったこと
 
@@ -479,6 +481,93 @@ openssl dgst -sha384 -binary package/dist/css/bootstrap.min.css | openssl base64
 `crossorigin="anonymous"` を付けた資産は、CORS 応答でないとブラウザが弾く。
 ローカルの控えを `python3 -m http.server` で出すと**ハッシュが正しくても全部失敗する**。
 `Access-Control-Allow-Origin: *` を返す小さなサーバーにすること。
+
+### 34. `controllerchange` をそのまま受けると、初回訪問が必ず1回リロードされる
+
+更新の案内を実装するとき、こう書きたくなる。
+
+```js
+navigator.serviceWorker.addEventListener('controllerchange', () => location.reload());
+```
+
+**これは初回訪問でも発火する。** Service Worker が `activate` で `clients.claim()`
+を呼ぶと、それまで管理下になかったページが管理下に入り、この合図が出るため。
+
+実測すると初回の画面遷移が **2回**（1回が正常）になる。
+ゲームなら並べたばかりの盤面が、入力画面なら打ちかけの文字が消える。
+
+**「もともと管理下だったか」で分ける直し方は、別の形で壊れる。**
+入れた直後に更新を押した場合、切り替わったのに読み込み直されなくなる（実測で踏んだ）。
+
+見るべきは**利用者が押したかどうか**だけ。
+
+```js
+let userAskedUpdate = false;
+navigator.serviceWorker.addEventListener('controllerchange', () => {
+  if (!userAskedUpdate || reloading) return;
+  reloading = true; location.reload();
+});
+```
+
+確かめ方は簡単で、**まっさらな状態で1回開き、画面遷移の回数を数える**だけ。
+
+### 35. CSP は「入れた」だけでは終わらない。入れたら動かすこと
+
+`Ice_slide-puzzle` に `script-src 'self'` を入れた直後、**ゲームが起動しなくなった。**
+
+```
+駒の数: 0 / ターン表示: null
+```
+
+本体が `index.html` にインラインで書かれ、ボタンも `onclick=` だったため。
+どちらも `'self'` では実行されない。
+
+**`'unsafe-inline'` を足せば直るが、それでは CSP を入れた意味がほとんど無くなる。**
+440行を外部ファイルへ切り出し、`onclick=` を `addEventListener` に繋ぎ替えた。
+
+**ビルドも静的解析も通る。動かさないと絶対に気づけない。**
+この一群には「1枚の HTML に全部書く」形が多いので、A型では必ず起きる。
+
+### 36. `<ruby>` を使うアプリは、ほぼ確実に同じ穴を持っている
+
+これまでに見た3本すべてで、`rt` の色を決め打ちしていた。
+
+| リポジトリ | 色 | 色のついた面での比 |
+|---|---|---:|
+| PhysicalEducation_note | `#666` | **1.28** |
+| Digital-Newspaper | `#555` | **1.47** |
+| Ice_slide-puzzle | `#666` | 4.44（白地のみ・面の上には無かった） |
+
+`Digital-Newspaper` は**タグのラベルについてだけ気づいて手当てしてあった**。
+気づいていたのに、送信ボタンのほうは漏れていた。
+**1か所ずつ潰すのではなく、まとめて色を継がせるのが正しい。**
+
+```css
+rt { color: #5f6368; }
+button rt, .badge rt, .nav-link rt, [class*="bg-"] rt, [class*="btn"] rt { color: inherit; }
+```
+
+### 37. 「設定が終わっていない人向けの文言」がいちばん読みにくいことがある
+
+`Digital-Newspaper` の「タグ設定がありません」は `color: red`（比 4.00）だった。
+**先生の設定が終わっていないときにだけ出る文**で、
+いちばん困っている人に向けた案内が、いちばん読みにくい色になっていた。
+
+エラー文・警告文・空状態の文言は、装飾ではなく**本文として**測ること。
+
+## 次にやること（第1群の残り）
+
+- **`Haiku-meeting`（C型）は重い。** 実測すると次の状態だった。
+  - **`<meta name="viewport">` が無い**（スマホ・タブレットで 980px 幅として描画される）
+  - Tailwind を `cdn.tailwindcss.com` から読んでいる（本番利用は非推奨の版。
+    ブラウザ内で CSS を生成する）
+  - React / ReactDOM / **Babel standalone** を unpkg から読み、
+    **JSX をブラウザで毎回コンパイルしている**
+  - 学校のフィルタリングでこれらが塞がれると、**画面が一切出ない**
+  → 自己ホスト化と事前コンパイルが要る。構成の変更なので、まとめて1本の PR にする。
+- `Class_tweet` / `Moral_note` / `Slide_Guild` / `Online-Publisher-pro` /
+  `MIRAI-Compass` / `MIRAI-Passport` / `Gamification` / `SchoolPlan_Editor` /
+  `Townmap_Mikke` / `Reflection_Journal` / `School_plan_note`
 
 ## 次に着手するときに人間が決めること（未決）
 
