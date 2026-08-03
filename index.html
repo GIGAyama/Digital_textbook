@@ -3,18 +3,67 @@
 
 <head>
   <meta charset="UTF-8" />
-  <link rel="icon" type="image/png" href="/Digital_textbook/favicon.png" />
-  <link rel="apple-touch-icon" href="/Digital_textbook/apple-touch-icon.png" />
+
+  <!-- ① インストールの合図を「いちばん先に」受け取る。
+       Chrome は条件が揃うと即座に beforeinstallprompt を出すため、
+       アプリ本体の読み込みより後だと合図を取りこぼし、通信が遅い端末で
+       「アプリを入れる」ボタンが出なくなる。だから <head> の最上部に置く。 -->
+  <script src="/Digital_textbook/pwa-install-hook.js"></script>
+
+  <!--
+    ② 読み込み先を明示的に絞る（CSP）。
+       ライブラリはすべて自分のサイト（'self'）から配っているので、
+       外部からスクリプトを読むのは Google のログイン部品だけに限定できる。
+       ここを絞っておくと、万一どこかから変なコードを差し込まれても動かない。
+
+       ・script-src   … 自分のサイト＋Googleドライブ連携のログイン部品のみ
+       ・connect-src  … Google ドライブ API と、共有に使う PeerJS の中継サーバーのみ
+       ・media-src に https: が入っているのは、先生が貼り付けた音声ファイルの
+                        URL を再生する機能があるため（貼り先は先生が決める）
+       ・style-src の 'unsafe-inline' は、React と fabric.js が要素へ
+                        直接 style を書き込むため外せない
+  -->
+  <meta http-equiv="Content-Security-Policy" content="
+      default-src 'self';
+      script-src 'self' https://accounts.google.com;
+      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+      font-src 'self' https://fonts.gstatic.com data:;
+      img-src 'self' data: blob:;
+      media-src 'self' https: data: blob:;
+      connect-src 'self' data: blob: https://www.googleapis.com https://accounts.google.com https://0.peerjs.com wss://0.peerjs.com;
+      worker-src 'self' blob:;
+      frame-src https://accounts.google.com;
+      manifest-src 'self';
+      object-src 'none';
+      base-uri 'self';
+      form-action 'self';
+    " />
+
+  <!-- viewport-fit=cover … ノッチやホームバーの領域まで背景を伸ばすために必須。
+       user-scalable=no は付けない。児童も教員も拡大して読めるようにするため。 -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="description" content="PDFを読み込んで書き込みができる、先生と子どものためのデジタル教科書アプリ" />
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&display=swap"
+    rel="stylesheet" />
+
   <meta name="theme-color" content="#f59e0b" />
-  <meta name="mobile-web-app-capable" content="yes" />
+  <!-- 児童用アプリなので配色は固定する（端末のダークモードで色が反転すると混乱する） -->
+  <meta name="color-scheme" content="light" />
+
+  <link rel="icon" type="image/png" href="/Digital_textbook/favicon.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/Digital_textbook/pwa-192x192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="/Digital_textbook/pwa-512x512.png" />
+  <!-- iOS は maskable に対応していないので、専用の四角いアイコンを渡す -->
+  <link rel="apple-touch-icon" href="/Digital_textbook/apple-touch-icon.png" />
+
   <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="デジタル教科書" />
+
   <title>デジタル教科書メーカー</title>
 </head>
 

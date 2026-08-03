@@ -7,7 +7,8 @@ import {
   Link as LinkIcon, Volume2, Settings, X,
   Undo2, Redo2, AlertCircle, CheckCircle2, Info, QrCode,
   Share2, Copy, Loader2, Download, Upload, Cloud,
-  Maximize, Minimize, Columns, Check, PenTool, ChevronUp
+  Maximize, Minimize, Columns, Check, PenTool, ChevronUp,
+  Presentation, Printer, Smartphone
 } from 'lucide-react';
 
 // ==========================================
@@ -498,12 +499,35 @@ const createMathShape = (subtype, x, y) => {
 // ==========================================
 // 2. 外部ライブラリ読み込み用フック (安定化版)
 // ==========================================
+// ライブラリはすべて自分のサイトから配る（public/vendor/。中身は npm から
+// scripts/sync-vendor.mjs が生成する）。以前は cdnjs / jsDelivr から読んでいたが、
+//   ・配信元が改ざんされると児童の端末で任意のコードが動く（SRI も無かった）
+//   ・学校のフィルタリングが CDN を塞ぐと、そもそもアプリが起動しない
+//   ・外部からスクリプトを読む前提だと CSP を厳しくできない
+// という3つの問題があったため、同一オリジンに寄せた。
+const VENDOR = (name) => `${import.meta.env.BASE_URL}vendor/${name}`;
+
+// PDF を取り込むときの描画倍率。
+// ここで決めた解像度が、そのまま「全端末での見え方の上限」になる。
+// P2P で別の端末に配ると、取り込んだ端末の解像度は当てにならないので、
+// 端末ごとの devicePixelRatio ではなく固定値にしてある。
+// 1.5 では 2倍表示の Chromebook・iPad で教科書の細い文字がぼやけた。
+// かといって 3 にすると1ページの面積が 4倍になり、メモリ4GBの Chromebook が
+// タブごと落ちる。2 あれば肉眼では十分きれいなので、ここで頭打ちにする。
+const PDF_RENDER_SCALE = 2;
+
+// 画面に出す Canvas 用の実効 devicePixelRatio。
+// 3倍端末で 9倍の面積を描くとメモリ4GBの Chromebook が落ちるため 2 で頭打ちにする。
+const effectiveDpr = () => Math.min(window.devicePixelRatio || 1, 2);
+
 const useExternalScripts = () => {
   const [status, setStatus] = useState({ loaded: false, error: null });
 
   useEffect(() => {
+    let cancelled = false;
+
     const loadScript = (src) => new Promise((resolve, reject) => {
-      let script = document.querySelector(`script[src="${src}"]`);
+      let script = document.querySelector(`script[data-vendor="${src}"]`);
       if (script) {
         if (script.getAttribute('data-loaded') === 'true') {
           return resolve();
@@ -515,33 +539,65 @@ const useExternalScripts = () => {
       }
       script = document.createElement('script');
       script.src = src;
-      script.crossOrigin = "anonymous";
-      script.onload = () => { 
-        script.setAttribute('data-loaded', 'true'); 
-        resolve(); 
+      script.setAttribute('data-vendor', src);
+      script.onload = () => {
+        script.setAttribute('data-loaded', 'true');
+        resolve();
       };
-      script.onerror = () => reject(new Error(`読み込み失敗: ${src}`));
+      script.onerror = () => {
+        // 失敗したタグを残すと、次の試行が「読み込み中の既存タグ」と誤認して
+        // 永久に待ち続ける。取り除いてからやり直せるようにする。
+        script.remove();
+        reject(new Error(`読み込み失敗: ${src}`));
+      };
       document.head.appendChild(script);
     });
 
+    // 40人が一斉に開くと校内Wi-Fiが詰まって取りこぼすことがある。
+    // すぐ諦めず、間隔を空けて3回まで試す。
+    const loadWithRetry = async (src, attempts = 3) => {
+      let lastError;
+      for (let i = 0; i < attempts; i++) {
+        if (cancelled) return;
+        try {
+          return await loadScript(src);
+        } catch (error) {
+          lastError = error;
+          if (i < attempts - 1) {
+            await new Promise((r) => setTimeout(r, 600 * (i + 1)));
+          }
+        }
+      }
+      throw lastError;
+    };
+
     const init = async () => {
       try {
-        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js');
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-        
-        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js');
-        await loadScript('https://cdn.jsdelivr.net/npm/idb-keyval@6.2.1/dist/umd.js');
-        await loadScript('https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js');
-        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js');
-        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcode/1.5.1/qrcode.min.js');
-        
+        await loadWithRetry(VENDOR('pdf.min.js'));
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = VENDOR('pdf.worker.min.js');
+
+        await loadWithRetry(VENDOR('fabric.min.js'));
+        // fabric は既定で端末の devicePixelRatio をそのまま使う。
+        // 3倍端末では 9倍の面積を確保することになり、メモリ4GBの Chromebook が
+        // タブごと落ちる。2 で頭打ちにする（肉眼では 2 で十分きれい）。
+        window.fabric.devicePixelRatio = effectiveDpr();
+
+        await loadWithRetry(VENDOR('idb-keyval.umd.js'));
+        await loadWithRetry(VENDOR('jsQR.js'));
+        await loadWithRetry(VENDOR('peerjs.min.js'));
+        await loadWithRetry(VENDOR('qrcode.min.js'));
+
+        if (cancelled) return;
         setStatus({ loaded: true, error: null });
-      } catch (error) { 
+      } catch (error) {
+        if (cancelled) return;
         console.error("ライブラリ読み込みエラー:", error);
         setStatus({ loaded: false, error: error.message });
       }
     };
     init();
+
+    return () => { cancelled = true; };
   }, []);
 
   return status;
@@ -682,6 +738,10 @@ export default function App() {
   const [showViewMenu, setShowViewMenu] = useState(false);
   // 教科書画面ではツールバーを常時表示せず、必要なときだけ呼び出せるようにする
   const [showToolbar, setShowToolbar] = useState(false);
+  // 提示モード（電子黒板で一斉授業に使うとき、教室の後ろの席から読める大きさにする）
+  const [isPresentation, setIsPresentation] = useState(false);
+  // 「アプリを入れる」ボタンを出してよいか（Chrome から合図が来たときだけ true）
+  const [canInstall, setCanInstall] = useState(false);
 
   // Custom Dialog & Toast
   const [dialog, setDialog] = useState(null);
@@ -878,6 +938,66 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(DB_KEY_VIEW_MODE, JSON.stringify({ mode: viewMode, order: halfOrder }));
   }, [viewMode, halfOrder]);
+
+  // --- 提示モード（電子黒板・一斉授業） ---
+  // 教室のいちばん後ろの席から読めることが要件。CSS 側で <body> に付いた
+  // .presentation を見て、文字とボタンをまとめて大きくする。
+  useEffect(() => {
+    document.body.classList.toggle('presentation', isPresentation);
+    return () => document.body.classList.remove('presentation');
+  }, [isPresentation]);
+
+  // --- 「アプリを入れる」ボタン ---
+  // 合図そのものは index.html の最上部（public/pwa-install-hook.js）で
+  // 受け取り済み。ここでは、その結果をボタンの表示に反映するだけ。
+  useEffect(() => {
+    // ホーム画面から起動しているときは、もう入れる必要がないので出さない
+    const isStandalone =
+      window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    if (isStandalone) return;
+
+    if (window.__deferredInstallPrompt) setCanInstall(true);
+
+    const onInstallable = () => setCanInstall(true);
+    const onInstalled = () => setCanInstall(false);
+    window.addEventListener('pwa-installable', onInstallable);
+    window.addEventListener('pwa-installed', onInstalled);
+    return () => {
+      window.removeEventListener('pwa-installable', onInstallable);
+      window.removeEventListener('pwa-installed', onInstalled);
+    };
+  }, []);
+
+  const handleInstall = useCallback(async () => {
+    const prompt = window.__deferredInstallPrompt;
+    if (!prompt) return;
+    window.__deferredInstallPrompt = null;
+    setCanInstall(false);
+    try {
+      prompt.prompt();
+      await prompt.userChoice;
+    } catch (e) {
+      // 合図は一度きりしか使えない。失敗しても再表示はしない（二重に出ると混乱する）
+      console.warn('インストールの案内を出せませんでした', e);
+    }
+  }, []);
+
+  // --- 印刷 ---
+  // 画面はスクロールを止めて1画面に収める作りなので、そのまま印刷すると
+  // 表示中の一部しか出ない。印刷したい領域に .print-target を付け、
+  // 向きだけ <body> のクラスで切り替える（@page は普通のセレクタで書けないため）。
+  const handlePrint = useCallback(() => {
+    const canvas = fabricRef.current;
+    // 横長のページは横向きで刷らないと、まわりが大きく余ってしまう
+    const landscape = !!canvas && canvas.width > canvas.height;
+    document.body.classList.toggle('print-landscape', landscape);
+    const cleanup = () => {
+      document.body.classList.remove('print-landscape');
+      window.removeEventListener('afterprint', cleanup);
+    };
+    window.addEventListener('afterprint', cleanup);
+    window.print();
+  }, []);
 
   // --- 全画面表示 ---
   const toggleFullscreen = useCallback(() => {
@@ -1109,11 +1229,20 @@ export default function App() {
       const newPages = [];
       for (let i = 1; i <= numPages; i++) {
         const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 1.5 });
+        const viewport = page.getViewport({ scale: PDF_RENDER_SCALE });
         const canvas = document.createElement('canvas');
-        canvas.width = viewport.width; canvas.height = viewport.height;
-        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-        newPages.push(canvas.toDataURL('image/jpeg', 0.8));
+        canvas.width = Math.round(viewport.width);
+        canvas.height = Math.round(viewport.height);
+        // JPEG は透明を扱えない。白で塗ってから描かないと、背景が透明な
+        // PDF が黒くつぶれて出ることがある。
+        const ctx = canvas.getContext('2d', { alpha: false });
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        newPages.push(canvas.toDataURL('image/jpeg', 0.85));
+        // 大きなページを何十枚も続けて描くとメモリを使い切るため、
+        // 1枚ごとに描画用のピクセルを手放す（Chromebook のタブ破棄対策）。
+        canvas.width = 0; canvas.height = 0;
         page.cleanup();
       }
       pdf.destroy();
@@ -2149,6 +2278,21 @@ export default function App() {
     backNavigationRef.current();
   }, []);
 
+  // Esc でも「1階層だけ戻る」。
+  // マウスが使えない・使いにくい人はモーダルを閉じられずに詰んでしまうため、
+  // 画面のどこにいても効くように、ショートカット全体とは別に登録する。
+  useEffect(() => {
+    const onEscape = (e) => {
+      if (e.key !== 'Escape') return;
+      // 文字を入力している最中は、入力の取り消しが優先されるので邪魔しない
+      const t = e.target;
+      if (t && (['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.isContentEditable)) return;
+      requestBackNavigation();
+    };
+    window.addEventListener('keydown', onEscape);
+    return () => window.removeEventListener('keydown', onEscape);
+  }, [requestBackNavigation]);
+
   // 履歴に「戻り先」を1件積む(常に1件残しておくのが基本方針)
   const pushHistoryGuard = useCallback(() => {
     try { window.history.pushState({ dtBackGuard: true }, ''); } catch (e) {}
@@ -2333,8 +2477,8 @@ export default function App() {
           <AlertCircle size={48} className="text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-slate-800 mb-2">ライブラリの読み込みに失敗しました</h2>
           <p className="text-slate-600 text-sm mb-4">
-            インターネット接続を確認し、ページを再読み込みしてください。<br/>
-            学校のネットワーク制限でブロックされている可能性もあります。
+            通信が不安定なようです。少し待ってから、下のボタンで再読み込みしてください。<br />
+            何度やっても直らないときは、ネットワークの管理者にご相談ください。
           </p>
           <div className="bg-slate-100 p-3 rounded-lg text-left text-xs font-mono text-red-600 overflow-hidden mb-6">
             {scriptError}
@@ -2366,6 +2510,19 @@ export default function App() {
             <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
               <h2 className="text-3xl font-bold text-slate-800 flex items-center gap-3 drop-shadow-sm"><BookOpen size={36} className="text-amber-500" /> わたしのプリント・教科書</h2>
               <div className="flex flex-wrap items-center gap-2">
+                {/* アプリとして入れてもらうためのボタン。
+                    ブラウザのアドレスバーの小さなアイコンは児童には見つけられないので、
+                    アプリの中にはっきり置く。Chrome から合図が来たときだけ出す。 */}
+                {canInstall && (
+                  <button
+                    onClick={handleInstall}
+                    title="このアプリをホーム画面・デスクトップに追加します"
+                    className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm"
+                  >
+                    <Smartphone size={16} />
+                    アプリを入れる
+                  </button>
+                )}
                 <button
                   onClick={handleExportBackup}
                   disabled={isExporting || textbooks.length === 0}
@@ -2711,7 +2868,10 @@ export default function App() {
               スクロール領域内のラッパーへ「拡大後の実サイズ」を明示的に与える
               (transform だけではレイアウト上のサイズが変わらず、端が見切れてしまうため)
             */}
-            <div ref={canvasScrollRef} className="absolute inset-0 overflow-auto flex" onClick={closeAllMenus}>
+            {/* print-target … 印刷時はこの中身だけを紙に流し込む
+                canvas-area   … 手書きの最中に画面そのものが動かないようにする
+                scroll-area   … 引っぱり更新が暴発しないようにする */}
+            <div ref={canvasScrollRef} className="absolute inset-0 overflow-auto flex print-target canvas-area scroll-area" onClick={closeAllMenus}>
               <div className="m-auto p-3">
                 {/*
                   半ページ表示: キャンバス自体は常にページ全体を保持したまま、
@@ -2741,15 +2901,23 @@ export default function App() {
 
             {showTimer && <TimerPanel onClose={() => setShowTimer(false)} />}
             
-            {/* ページナビゲーション (Floating) */}
-            <div className="absolute bottom-3 sm:bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-slate-800/80 backdrop-blur-md text-white rounded-full px-3 sm:px-4 py-1.5 sm:py-2 shadow-lg z-20 animate-in slide-in-from-bottom-5">
-              <button onClick={() => changePage(-1)} disabled={!canGoPrev} className="p-1 hover:text-amber-400 disabled:opacity-30 transition-colors"><ChevronLeft size={24} /></button>
-              
+            {/* ページナビゲーション (Floating)
+                bottom に safe-area を足すのは、iPhone のホームバーに
+                「次のページ」ボタンが隠れて押せなくなるのを防ぐため。 */}
+            <div
+              className="no-print absolute left-1/2 -translate-x-1/2 flex items-center gap-2 bg-slate-800/80 backdrop-blur-md text-white rounded-full px-3 sm:px-4 py-1.5 sm:py-2 shadow-lg z-20 animate-in slide-in-from-bottom-5"
+              style={{ bottom: 'calc(0.75rem + var(--safe-b))' }}
+            >
+              <button onClick={() => changePage(-1)} disabled={!canGoPrev} aria-label="まえのページ" className="p-1 hover:text-amber-400 disabled:opacity-30 transition-colors"><ChevronLeft size={24} /></button>
+
               <div className="relative flex items-center justify-center">
-                <button 
-                  onClick={(e) => { e.stopPropagation(); closeAllMenus(); setShowPageJump(!showPageJump); }} 
+                <button
+                  onClick={(e) => { e.stopPropagation(); closeAllMenus(); setShowPageJump(!showPageJump); }}
                   className="font-bold w-16 text-center tracking-widest hover:text-amber-400 transition-colors"
                   title="ページを移動"
+                  aria-label={`ページを移動 (いま ${currentPage + 1} / ${currentPages.length} ページ)`}
+                  aria-haspopup="dialog"
+                  aria-expanded={showPageJump}
                 >
                   {currentPage + 1} / {currentPages.length}
                 </button>
@@ -2790,24 +2958,46 @@ export default function App() {
                 </div>
               )}
 
-              <button onClick={() => changePage(1)} disabled={!canGoNext} className="p-1 hover:text-amber-400 disabled:opacity-30 transition-colors"><ChevronRight size={24} /></button>
+              <button onClick={() => changePage(1)} disabled={!canGoNext} aria-label="つぎのページ" className="p-1 hover:text-amber-400 disabled:opacity-30 transition-colors"><ChevronRight size={24} /></button>
             </div>
 
             {/* ズーム＆クリア (Floating Right) */}
             {/* 全画面表示中の終了ボタン (ヘッダー類が隠れるため常に見える位置に置く) */}
             {hideChrome && (
-              <button onClick={toggleFullscreen} title="全画面を終了 (F)" className="absolute top-3 right-3 z-30 p-3 bg-slate-800/70 hover:bg-slate-800/90 backdrop-blur-md text-white rounded-full shadow-lg transition-all active:scale-95 animate-in fade-in">
+              <button onClick={toggleFullscreen} title="全画面を終了 (F)" aria-label="全画面を終了" className="no-print absolute top-3 right-3 z-30 p-3 bg-slate-800/70 hover:bg-slate-800/90 backdrop-blur-md text-white rounded-full shadow-lg transition-all active:scale-95 animate-in fade-in">
                 <Minimize size={20} />
               </button>
             )}
 
-            <div className="absolute bottom-3 right-3 sm:bottom-6 sm:right-6 flex flex-col gap-2 sm:gap-3 z-20">
+            <div
+              className="no-print absolute right-3 sm:right-6 flex flex-col gap-2 sm:gap-3 z-20"
+              style={{ bottom: 'calc(0.75rem + var(--safe-b))' }}
+            >
               <div className="flex flex-col bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
-                <button onClick={() => setZoom(Math.min(3, zoom + 0.2))} className="p-2.5 sm:p-3 text-slate-600 hover:bg-slate-50 hover:text-amber-600 transition-colors border-b border-slate-100"><ZoomIn size={20} /></button>
-                <div className="py-1 text-center font-bold text-xs text-slate-400 bg-slate-50">{Math.round(zoom * 100)}%</div>
-                <button onClick={() => setZoom(Math.max(0.5, zoom - 0.2))} className="p-2.5 sm:p-3 text-slate-600 hover:bg-slate-50 hover:text-amber-600 transition-colors border-t border-slate-100"><ZoomOut size={20} /></button>
+                <button onClick={() => setZoom(Math.min(3, zoom + 0.2))} aria-label="大きくする" className="p-2.5 sm:p-3 text-slate-600 hover:bg-slate-50 hover:text-amber-600 transition-colors border-b border-slate-100"><ZoomIn size={20} /></button>
+                <div className="py-1 text-center font-bold text-xs text-slate-500 bg-slate-50" aria-live="polite">{Math.round(zoom * 100)}%</div>
+                <button onClick={() => setZoom(Math.max(0.5, zoom - 0.2))} aria-label="小さくする" className="p-2.5 sm:p-3 text-slate-600 hover:bg-slate-50 hover:text-amber-600 transition-colors border-t border-slate-100"><ZoomOut size={20} /></button>
               </div>
-              <button onClick={clearCurrentPage} className="p-3 sm:p-4 bg-white border border-red-200 text-red-500 hover:bg-red-50 rounded-xl shadow-lg transition-all active:scale-95 group">
+              {/* 提示モード … 電子黒板で一斉授業に使うとき、教室の後ろから読める大きさにする */}
+              <button
+                onClick={() => setIsPresentation(v => !v)}
+                title={isPresentation ? "提示モードを終わる" : "大きく表示（電子黒板用）"}
+                aria-label={isPresentation ? "提示モードを終わる" : "大きく表示（電子黒板用）"}
+                aria-pressed={isPresentation}
+                className={`p-3 sm:p-4 rounded-xl shadow-lg transition-all active:scale-95 border ${isPresentation ? 'bg-amber-500 border-amber-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+              >
+                <Presentation size={22} />
+              </button>
+              {/* 印刷 … 書き込んだページを紙で配るのは、この種のアプリの本質機能 */}
+              <button
+                onClick={handlePrint}
+                title="このページを印刷する"
+                aria-label="このページを印刷する"
+                className="p-3 sm:p-4 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-amber-600 rounded-xl shadow-lg transition-all active:scale-95"
+              >
+                <Printer size={22} />
+              </button>
+              <button onClick={clearCurrentPage} aria-label="このページの書き込みをすべて消す" className="p-3 sm:p-4 bg-white border border-red-200 text-red-600 hover:bg-red-50 rounded-xl shadow-lg transition-all active:scale-95 group">
                 <Trash2 size={22} className="group-hover:scale-110 transition-transform" />
               </button>
             </div>
@@ -2819,7 +3009,7 @@ export default function App() {
 
       {/* P2P ホスティング（共有元）モーダル */}
       {shareMode === 'hosting' && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[500] p-4 animate-in fade-in">
+        <div role="dialog" aria-modal="true" aria-label="データを共有する" className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[500] p-4 animate-in fade-in">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 md:p-8 text-center animate-in zoom-in-95">
             <div className="mx-auto bg-emerald-100 text-emerald-600 w-12 h-12 rounded-full flex items-center justify-center mb-3">
               <Share2 size={24} />
@@ -2867,7 +3057,7 @@ export default function App() {
 
       {/* P2P 受信中モーダル */}
       {shareMode === 'receiving' && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[500] p-4 animate-in fade-in">
+        <div role="dialog" aria-modal="true" aria-label="データを受信しています" className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[500] p-4 animate-in fade-in">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 text-center flex flex-col items-center">
              <Loader2 className="animate-spin text-emerald-500 mb-4" size={48} />
              <h3 className="font-bold text-xl mb-2 text-slate-800">データを受信しています</h3>
@@ -2878,7 +3068,7 @@ export default function App() {
 
       {/* ショートカットキーモーダル */}
       {showShortcuts && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[600] p-4 animate-in fade-in" onClick={() => setShowShortcuts(false)}>
+        <div role="dialog" aria-modal="true" aria-label="ショートカットキー" className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[600] p-4 animate-in fade-in" onClick={() => setShowShortcuts(false)}>
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90dvh] flex flex-col animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
               <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2">
@@ -2982,7 +3172,7 @@ export default function App() {
 
       {/* バックアップ取り込み確認モーダル */}
       {importPreview && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[400] p-4 animate-in fade-in">
+        <div role="dialog" aria-modal="true" aria-label="バックアップを取り込む" className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[400] p-4 animate-in fade-in">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95">
             <div className="p-6 md:p-7 border-b border-slate-100 bg-slate-50">
               <h3 className="font-bold text-xl mb-1 text-slate-800 flex items-center gap-2">
@@ -3041,7 +3231,7 @@ export default function App() {
 
       {/* マイスタンプ作成モーダル */}
       {showMyStampCreator && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[200] p-4 animate-in fade-in">
+        <div role="dialog" aria-modal="true" aria-label="マイスタンプを作る" className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[200] p-4 animate-in fade-in">
            <form onSubmit={(e) => {
              e.preventDefault();
              const t = e.target.stampText.value, c = e.target.stampColor.value, s = e.target.stampShape.value;
@@ -3081,7 +3271,7 @@ export default function App() {
 
       {/* カスタム確認ダイアログ */}
       {dialog && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[300] p-4 animate-in fade-in duration-200">
+        <div role="dialog" aria-modal="true" aria-label="かくにん" className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[300] p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="p-6 md:p-8">
               <h3 className="font-bold text-xl mb-3 text-slate-800 flex items-center gap-2">
@@ -3102,7 +3292,14 @@ export default function App() {
 
       {/* カスタムトースト通知 */}
       {toast && (
-        <div className={`fixed bottom-6 right-6 md:bottom-10 md:right-10 px-5 py-3.5 rounded-2xl shadow-xl font-bold flex items-center gap-3 animate-in slide-in-from-bottom-5 z-[400] ${toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-slate-800 text-white'}`}>
+        // 保存できた・失敗したといった状態の変化は、画面を見ていない人にも
+        // 伝わるよう読み上げてもらう。読み上げ中の操作は妨げない polite にする。
+        <div
+          role="status"
+          aria-live="polite"
+          className={`no-print fixed right-6 md:right-10 px-5 py-3.5 rounded-2xl shadow-xl font-bold flex items-center gap-3 animate-in slide-in-from-bottom-5 z-[400] ${toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-slate-800 text-white'}`}
+          style={{ bottom: 'calc(1.5rem + var(--safe-b))' }}
+        >
           {toast.type === 'error'
             ? <AlertCircle size={20}/>
             : toast.type === 'info'

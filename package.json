@@ -4,9 +4,13 @@
     "version": "1.0.0",
     "type": "module",
     "scripts": {
+        "sync-vendor": "node scripts/sync-vendor.mjs",
+        "predev": "npm run sync-vendor",
         "dev": "vite",
+        "prebuild": "npm run sync-vendor",
         "build": "vite build",
         "preview": "vite preview",
+        "check": "node scripts/check-project.mjs",
         "deploy": "gh-pages -d dist"
     },
     "dependencies": {
@@ -19,8 +23,14 @@
         "@types/react-dom": "^18.2.22",
         "@vitejs/plugin-react": "^4.2.1",
         "autoprefixer": "^10.4.18",
+        "fabric": "^5.3.0",
         "gh-pages": "^6.1.1",
+        "idb-keyval": "^6.2.1",
+        "jsqr": "^1.4.0",
+        "pdfjs-dist": "^2.16.105",
+        "peerjs": "^1.5.2",
         "postcss": "^8.4.35",
+        "qrcode": "^1.5.1",
         "tailwindcss": "^3.4.1",
         "tailwindcss-animate": "^1.0.7",
         "vite": "^5.1.4",

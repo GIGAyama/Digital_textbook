@@ -12,3 +12,7 @@ dev-dist
 
 # P2 で画像を圧縮する際、元画像をここへ退避する（配布物には含めない）
 .assets-original/
+
+# npm から自動生成する外部ライブラリ（scripts/sync-vendor.mjs が作る）。
+# 合計2MB近くあるのでコミットしない。npm ci → npm run build で再現される。
+public/vendor/
