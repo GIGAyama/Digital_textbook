@@ -7,7 +7,7 @@
 | Digital_textbook | B | ✅ | ✅ | ✅ | ✅ | ✅ | 第3群。CDN自己ホスト化＋CSP、コントラスト0件、maskable 修正、ESLint 導入まで実施 |
 | Townmap_Mikke | C+ | ✅ | ✅ | — | 🔜 | — | 第1群。docs/ のみ。**sw.js が他アプリのキャッシュを全削除していた問題を修正**。GAS 本体は scriptId 待ち。CSP は手順書として添付 |
 | Reflection_Journal | C+ | ✅ | ✅ | ✅ | 🔜 | — | 第1群。docs/ のみ。**同じ sw.js の不具合**＋maskable がセーフゾーンの 91.64% を侵していた問題を修正。GAS 本体は scriptId 待ち |
-| Homework_barcordreader | B | ✅ | ✅ | ✅ | ✅ | ✅ | 第1群。GAS 未使用のため単独で完結。**Service Worker が一度も登録されていなかった**。コントラスト63→0件、タップ42→0件、画像 493→100KB |
+| Homework_barcordreader | B | ✅ | ✅ | ✅ | ✅ | ✅ | 第1群。**完了・マージ済み**（#19 / #28）。コントラスト63→0件、タップ42→0件、画像 493→100KB、offline.html、更新通知、CSP |
 
 ## Digital_textbook でやったこと
 
@@ -335,6 +335,63 @@ Digital_textbook では pdf.js などを自己ホストに寄せた。あれは*
 3. **`VIEWPORT_100VH` が誤検知。** `@supports not (height: 100dvh) { ... 100vh }` の形を見ていなかった。
 
 **わざと壊す試験をしなければ、3件とも「0件でした」で通り過ぎていた。**
+
+### 25. 測る道具は `scripts/measure/` に置いた
+
+57本を1本ずつ回すので、**1回の投資で全部に効く道具**だけを作って置いてある。
+使い方は [scripts/measure/README.md](./scripts/measure/README.md)。
+
+| 道具 | 何をするか |
+|---|---|
+| `audit-repo.mjs` | リポジトリの型を判定し、A〜G の観点を JSON で出す |
+| `probe-a11y.js` | ブラウザの中でコントラストとタップ領域を実測する |
+| `gas-assemble.mjs` | GAS のウェブアプリを手元で開ける1枚の HTML に組み立てる |
+| `gas-measure.mjs` | 組み立てた画面を測る |
+
+### 26. C型（GAS）でも表示は実測できる
+
+本番（`script.google.com`）へは作業環境から到達できない。
+しかし GAS が返す画面は `index.html` + `css.html` + `js.html` を貼り合わせたものなので、
+**同じ貼り合わせを手元でやれば、表示まわりは本物と同じものを測れる。**
+`google.script.run` はダミーに差し替える。
+
+測れないのは「サーバーの戻り値に依存する画面」だけ。
+**「GAS だから測れない」は正しくない。表示は測れる。**
+
+### 27. CDN が塞がれた環境で測ると、数字が意味を失う
+
+この作業環境は `cdn.jsdelivr.net` へ出られない。
+そのまま測ると **Bootstrap が当たらない素の HTML** を測ることになる。
+
+体育ノートでの実測。
+
+| | コントラスト | タップ |
+|---|---:|---:|
+| CDN の控えを用意する前 | 6件 | 6件 |
+| 用意したあと | **2件** | **1件** |
+
+**前者は全部でたらめだった。** npm から同じ版を取って jsDelivr と同じパスで並べ、
+検査用の複製だけ向け直す。リポジトリには手を入れない。
+
+なお **Google Fonts はわざと塞がれたままにしてある。**
+フィルタリングされた学校とまったく同じ状態で測れるので、そのほうが都合がよい。
+
+### 28. C型は「表示は直せる・マージできる」「OAuth スコープは触らない」
+
+`script.google.com` へ到達できないため、**スコープの変更は検証できない。**
+間違えると全教員で認可が通らなくなり、教室が止まる。
+
+`PhysicalEducation_note` の `appsscript.json` には
+`https://www.googleapis.com/auth/drive`（Drive 全体）があり、規格上は ❌ にあたる。
+ただしコードを読むと `DriveApp.searchFiles()` で
+**先生のドライブ全体からお手本の画像・動画を探す**機能があり、
+`drive.file` に落とすとこの機能が壊れる。carelessness ではなく設計上の要求だった。
+
+**候補は `drive.readonly` + `drive.file` の組み合わせ**（全体を読めるが、
+書けるのはアプリが作ったものだけ）。ただし Apps Script の `DriveApp` は
+スコープの粒度が粗く、実際に通るかは**デプロイして確かめないと分からない。**
+
+→ **直さずに AUDIT.md へ書き、PR で提案するだけにする。マージしない。**
 
 ## 次に着手するときに人間が決めること（未決）
 
