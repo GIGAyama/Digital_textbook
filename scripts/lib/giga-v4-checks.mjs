@@ -63,9 +63,11 @@ export function runGigaV4Checks(rootDir, config) {
         for (const { file, text } of styleAndMarkup) {
             const pattern = /(?:min-height|max-height|height)\s*:\s*100vh/g;
             for (const m of text.matchAll(pattern)) {
-                // 直後の行に dvh のフォールバックが書いてあれば正しい書き方
-                const after = text.slice(m.index, m.index + 200);
-                if (/100dvh/.test(after)) continue;
+                // dvh のフォールバックは前後どちらに書いてもよい。
+                // @supports not (height: 100dvh) { ... height: 100vh } のように
+                // 100vh をあとに書く形もあるため、前方も見る。
+                const around = text.slice(Math.max(0, m.index - 300), m.index + 300);
+                if (/100dvh/.test(around)) continue;
                 issues.push(issue('error', 'VIEWPORT_100VH',
                     '100vh を単独で使っている。100dvh を1行下に添えること（スマホでアドレスバーの分はみ出す）。',
                     file, lineOf(text, m.index)));
@@ -208,7 +210,13 @@ export function runGigaV4Checks(rootDir, config) {
     }
 
     if (!skip('PWA_INSTALL')) {
-        if (!/beforeinstallprompt/.test(allText) && !/beforeinstallprompt/.test(read(rootDir, 'public/pwa-install-hook.js') || '')) {
+        // 捕捉は <head> の先頭で読む小さな外部ファイルに置くのが定石なので、
+        // src/ だけでなく public/ 直下の .js も見る。ファイル名はアプリごとに違う。
+        const publicScripts = walk(path.join(rootDir, 'public'), ignoreDirs)
+            .filter((abs) => abs.endsWith('.js'))
+            .map((abs) => fs.readFileSync(abs, 'utf8'))
+            .join('\n');
+        if (!/beforeinstallprompt/.test(allText) && !/beforeinstallprompt/.test(publicScripts)) {
             issues.push(issue('error', 'PWA_INSTALL',
                 'beforeinstallprompt を捕捉していない。通信が遅い端末でインストールボタンが出なくなる。'));
         }
@@ -222,13 +230,36 @@ export function runGigaV4Checks(rootDir, config) {
     // Service Worker が localStorage に触れると学習データを壊しうる。
     // caches.keys() の全削除は同一オリジンの他アプリをオフラインで起動不能にする。
     if (!skip('SW_UNSAFE')) {
+        // 「localStorage は操作しない」と注意書きしてあるだけで引っかかっては、
+        // 検査が信用されなくなる。判定の前にコメントを落とす。
+        const stripComments = (src) => src
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/(^|[^:])\/\/.*$/gm, '$1');
         for (const rel of ['sw.js', 'public/sw.js', 'dist/sw.js', 'docs/sw.js']) {
-            const sw = read(rootDir, rel);
-            if (!sw) continue;
+            const raw = read(rootDir, rel);
+            if (!raw) continue;
+            const sw = stripComments(raw);
             if (/localStorage/.test(sw)) {
                 issues.push(issue('error', 'SW_LOCALSTORAGE', 'Service Worker が localStorage に触れている。', rel));
             }
-            if (/caches\.keys\(\)[\s\S]{0,200}?map\s*\(\s*(\w+)\s*=>\s*caches\.delete\(\s*\1\s*\)/.test(sw)) {
+            /*
+             * 全キャッシュ削除の判定は、削除する式の形で書かない。
+             * (k) => caches.delete(k) と k => caches.delete(k) と
+             * (e) => caches.delete(e) のように書き方の幅が広く、
+             * 正規表現で追うと必ず取りこぼす（実際、53リポジトリを調べたとき
+             * 引数の書き方が違うだけで1件見落とした）。
+             *
+             * 見るべきは「消す式」ではなく「自アプリだけに絞る式があるか」。
+             * caches.keys() で一覧を取って消しているのに、接頭辞で絞る
+             * startsWith が1つも無ければ、それは全部消している。
+             */
+            const listsAllCaches = /caches\.keys\s*\(\s*\)/.test(sw);
+            const deletes = /caches\.delete\s*\(/.test(sw);
+            // 「接頭辞で始まるものだけ」を表す書き方があるかどうかだけを見る。
+            // CACHE_PREFIX という定数があること自体は根拠にならない。
+            // 名前は定義しつつ、activate では全部消しているコードが実在した。
+            const narrowsToOwn = /startsWith\s*\(|indexOf\s*\([^)]*\)\s*===?\s*0/.test(sw);
+            if (listsAllCaches && deletes && !narrowsToOwn) {
                 issues.push(issue('error', 'SW_CACHE_WIPE',
                     'Service Worker が全キャッシュを削除している。同一オリジンの他アプリがオフラインで起動しなくなる。', rel));
             }

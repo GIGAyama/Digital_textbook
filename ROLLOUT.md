@@ -7,6 +7,7 @@
 | Digital_textbook | B | ✅ | ✅ | ✅ | ✅ | ✅ | 第3群。CDN自己ホスト化＋CSP、コントラスト0件、maskable 修正、ESLint 導入まで実施 |
 | Townmap_Mikke | C+ | ✅ | ✅ | — | 🔜 | — | 第1群。docs/ のみ。**sw.js が他アプリのキャッシュを全削除していた問題を修正**。GAS 本体は scriptId 待ち。CSP は手順書として添付 |
 | Reflection_Journal | C+ | ✅ | ✅ | ✅ | 🔜 | — | 第1群。docs/ のみ。**同じ sw.js の不具合**＋maskable がセーフゾーンの 91.64% を侵していた問題を修正。GAS 本体は scriptId 待ち |
+| Homework_barcordreader | B | ✅ | ✅ | ✅ | ✅ | ✅ | 第1群。GAS 未使用のため単独で完結。**Service Worker が一度も登録されていなかった**。コントラスト63→0件、タップ42→0件、画像 493→100KB |
 
 ## Digital_textbook でやったこと
 
@@ -220,6 +221,120 @@ Android が円で切り抜くと大きく欠ける。
 manifest を目で見るだけでは気づけない（`src` が同じファイルなだけ）。
 **画素を数えること。** 判定は Digital_textbook の
 `scripts/make-maskable.mjs` の検査部分がそのまま使える。
+
+### 18. Service Worker の登録を React の effect に移すと、黙って登録されなくなる
+
+`Homework_barcordreader` を直しているとき、自分で入れた退行で気づいた。
+**元のコードは正しく動いていた。** 実測で確かめた3通りの結果がこれ。
+
+| 登録を書いた場所 | 登録される |
+|---|---|
+| `main.jsx` の一番外側（元のコード）で `load` を待つ | ✅ される |
+| React の `useEffect` の中で `load` を待つ | ❌ **されない** |
+| React の `useEffect` の中で `readyState` を見てから待つ | ✅ される |
+
+```js
+// これは動く。module script は load より前に走るので、リスナーが間に合う。
+window.addEventListener('load', () => { navigator.serviceWorker.register(...) });
+
+// これは動かない。effect は描画のあとに走り、そのとき load は終わっている。
+useEffect(() => {
+  window.addEventListener('load', () => { navigator.serviceWorker.register(...) });
+}, []);
+```
+
+登録と「あたらしい版があります」の案内は一体で扱いたくなるので、
+**登録を React 側へ持っていく改修は自然に発生する。** そのとき静かに壊れる。
+
+必ずこう書く。
+
+```js
+if (document.readyState === 'complete') start();
+else window.addEventListener('load', start, { once: true });
+```
+
+**そして、直したあとに必ずブラウザへ問い合わせて確かめること。**
+ビルドは通るし、`sw.js` を読んでも分からない。
+
+```js
+const reg = await navigator.serviceWorker.getRegistration();  // ← これだけ
+```
+
+なお `addEventListener('load'` で Service Worker を登録している形は
+53リポジトリ中 21本にあるが、**いずれも読み込み直後に走る位置にあるので問題ない。**
+危ないのは「あとから走るところへ移したとき」だけ。
+
+### 19. Tailwind v4 は色を `oklch()` で書く。コントラスト計測が壊れる
+
+`getComputedStyle` の `color` が `oklch(0.554 0.046 257.417)` で返ってくる。
+数字だけ拾う実装だと `rgb(0.554, 0.046, 257.417)` と読み違え、
+**どの要素も「ほぼ真っ黒」と判定されて比が 1.0 付近になる。**
+
+`ctx.fillStyle` に代入して読み返しても `oklch` のまま返る（Chrome は色空間を保つ）。
+**1px 実際に塗って `getImageData` で読む**のが確実。
+
+```js
+ctx.fillStyle = s; ctx.fillRect(0, 0, 1, 1);
+const d = ctx.getImageData(0, 0, 1, 1).data;   // ← sRGB の実値
+```
+
+これを直したら、誤報だった件が消え、本当に足りていない63件が見えた。
+**Tailwind v3 のリポジトリでは起きない。v4 に上げてあるものだけ注意。**
+
+### 20. コントラストの一括置換は、濃い面の上の文字を壊す
+
+`text-slate-400` → `text-slate-500` のような一括置換をかけると、
+**濃いグラデーションのカードの上に置いた薄い文字まで濃く**なり、逆に読めなくなる。
+実測で3件が悪化していた（比 2.66）。
+
+同じ行に `bg-slate-900` があるかどうかで避けようとしたが、
+面と文字が別の行にあるので効かない。**一括置換のあとに必ず測り直すこと。**
+
+### 21. `apple-touch-icon` に透明のある画像を指すと、iPad で四隅が黒くなる
+
+`icon-192.png`（角丸の外が透明）をそのまま指しているリポジトリが多い。
+iOS は apple-touch-icon の透明部分を**黒**で埋めるため、
+ホーム画面でアイコンの四隅だけが黒く出る。
+透明を持たない専用画像（180×180）を1枚作れば済む。
+
+### 22. `frame-ancestors` は `<meta>` では効かない
+
+書いても無視され、読み込みのたびにコンソールに警告が出るだけ。
+GitHub Pages ではヘッダーを足せないので、**書かないのが正しい**。
+`index.html` に「独自ドメインや CDN を挟むときに設定すること」とコメントを残す。
+
+### 23. フォントの CDN は、実行コードの CDN とは別に考える
+
+Digital_textbook では pdf.js などを自己ホストに寄せた。あれは**無いと起動しない実行コード**。
+フォントは違う。止まっても字の形が変わるだけで、動作には影響しない。
+
+`Homework_barcordreader` で自己ホスト化を検討し、測ったうえで**やめた**。
+
+| 方式 | 初回の転送 | リポジトリの重さ |
+|---|---|---|
+| Google Fonts | 必要なサブセットだけ | 0 |
+| 日本語サブセット一括 | **4.2MB** | 4.2MB |
+| 分割サブセット | 必要な分だけ | **6.6MB**（354ファイル） |
+
+一括自己ホストは、**校内Wi-Fiで40人が同時に開くという、いちばん避けたい状況を自分で作る。**
+代わりに端末側の日本語フォントを後ろに並べ、塞がれても崩れないようにした。
+
+なおこの作業環境では `fonts.googleapis.com` が塞がれているため、
+**フィルタリングされた学校とまったく同じ状態で全画面を測れる。** これは使える。
+
+### 24. 共通の検査そのものに不具合が3件あった
+
+`scripts/lib/giga-v4-checks.mjs` は全リポジトリに配るものなので、
+ここの取りこぼしは全部に効く。わざと壊す試験で見つけた。
+
+1. **`SW_CACHE_WIPE` が取りこぼす。** 削除する式を正規表現で追っていたため、
+   `(k) => caches.delete(k)` のように引数を括弧で囲む書き方を見落としていた。
+   **「消す式」ではなく「`startsWith` で自アプリに絞る式があるか」を見る**形に変えた。
+   `CACHE_PREFIX` という定数の有無は根拠にしない（名前だけ定義して全部消すコードが実在した）。
+2. **`SW_LOCALSTORAGE` が誤検知。** 「localStorage は操作しない」という注意書きに反応していた。
+3. **`VIEWPORT_100VH` が誤検知。** `@supports not (height: 100dvh) { ... 100vh }` の形を見ていなかった。
+
+**わざと壊す試験をしなければ、3件とも「0件でした」で通り過ぎていた。**
 
 ## 次に着手するときに人間が決めること（未決）
 
