@@ -24,6 +24,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # 配布物には入らない開発用の依存も含めて、危険度の高いものが無いか見る。
+      # ここで落として公開を止めたいわけではないので、結果は表示だけにする。
+      - name: Audit dependencies
+        run: npm audit --audit-level=high || true
+
+      # GIGA Standard v4 Part I の検査。落ちたら公開しない。
+      # 検査に落ちたときは、検査をゆるめるのではなく quality.config.json に
+      # 理由を書いて明示的に許可すること。
+      - name: Quality gate
+        run: npm run check
+
       - name: Build
         run: npm run build
         env:
