@@ -11,6 +11,7 @@
 | PhysicalEducation_note | C | ✅ | ✅ | — | ✅ | — | 第1群。**ふりがなが青いボタンの上で比 1.28**（低学年ほど読めない）。Bootstrap 既定色 4件も基準未満。CDN 4本に SRI＋版固定。OAuth スコープは提案のみ（PR #1・未マージ） |
 | Ice_slide-puzzle | A | ✅ | ✅ | ✅ | ✅ | — | **完了・マージ済み**（#3）。拡大禁止を解除、黄色の上の白文字 1.53、画像 1321→44KB、CSP でゲームが止まったので本体を app.js へ切り出し |
 | Digital-Newspaper | C | ✅ | ✅ | — | ✅ | — | 第1群。**送信ボタンのふりがなが比 1.47**。5件→0件（PR #1・未マージ） |
+| Haiku-meeting | C | ✅ | ✅ | ✅ | ✅ | — | 第1群。**CDN が塞がれると画面が一切出なかった**。ブラウザ内 Babel を廃し 3.3MB→237KB。コントラスト9→0件（PR #1・未マージ） |
 
 ## Digital_textbook でやったこと
 
@@ -569,6 +570,88 @@ button rt, .badge rt, .nav-link rt, [class*="bg-"] rt, [class*="btn"] rt { color
 - `Class_tweet` / `Moral_note` / `Slide_Guild` / `Online-Publisher-pro` /
   `MIRAI-Compass` / `MIRAI-Passport` / `Gamification` / `SchoolPlan_Editor` /
   `Townmap_Mikke` / `Reflection_Journal` / `School_plan_note`
+
+### 38. 【最重要】11本が「ブラウザの中で JSX をコンパイル」している
+
+`Haiku-meeting` を直していて分かった。**これは1本の問題ではない。**
+
+```bash
+grep -rl "babel/standalone" $(git ls-files '*.html')
+```
+
+| 対象 | Babel standalone | Tailwind CDN | React CDN |
+|---|:--:|:--:|:--:|
+| hagetaka-game | ✓ | ✓ | ✓ |
+| **haiku-meeting**（対応済み） | ✓ | ✓ | — |
+| kana_master | ✓ | ✓ | ✓ |
+| keisan-card | ✓ | ✓ | ✓ |
+| linker-clipper | ✓ | ✓ | ✓ |
+| online-manuscript-paper | ✓ | ✓ | ✓ |
+| online-manuscript-paper-lite | ✓ | ✓ | ✓ |
+| online-manuscript-paper-pro | ✓ | ✓ | ✓ |
+| online-publisher-pro | ✓ | ✓ | ✓ |
+| **reflection_journal** | ✓ | ✓ | ✓ |
+| **townmap_mikke** | ✓ | ✓ | ✓ |
+| gmail_cleaner | — | ✓ | — |
+| officefile_converter | — | ✓ | — |
+
+**11本が `@babel/standalone` をブラウザへ送っている。**
+
+何が起きるか。
+
+1. **学校のフィルタリングで CDN が塞がれると、画面が白いまま何も出ない。**
+   1本でも届かないと落ちる。児童からは「壊れている」としか見えず、
+   原因はアプリの外にあるので先生が調べても分からない。
+2. **`@babel/standalone` だけで 3MB 近くある。** しかもその役目は
+   「ブラウザの中で JSX を翻訳すること」。開くたびに全部コンパイルし直している。
+   40人が同時に開く校内 Wi-Fi では、そのまま待ち時間になる。
+
+`Townmap_Mikke` と `Reflection_Journal` は `docs/` のシェルだけ先に直したが、
+**GAS 本体（`App.html` / `index.html`）にはこの構成が残っている。**
+
+### 直し方（`Haiku-meeting` のものがそのまま使える）
+
+| もの | 前 | 後 |
+|---|---|---|
+| Tailwind | ブラウザ内で CSS を生成 | 使うクラスだけの CSS を先に作る |
+| JSX | ブラウザ内で毎回コンパイル | **ビルド時に1回だけ** |
+| React / ReactDOM | CDN | 自分側に置く |
+
+`Haiku-meeting/tools/build.mjs` が3つとも作る。**転送量は 3.3MB → 237KB になった。**
+
+GAS（C型・C+型）では `.gs` と `.html` しか置けないので、
+ライブラリは `<script>` で包んだ `.html` にして `include()` する。
+
+つまずいた点を2つ。
+
+- `require.resolve('react/umd/react.production.min.js')` は通らない。
+  react の `package.json` が `exports` で `umd/` を公開していないため
+  （`ERR_PACKAGE_PATH_NOT_EXPORTED`）。パスで直に指定する。
+- `canvas-confetti` の npm パッケージに `confetti.browser.min.js` は無い。
+  jsDelivr が自動で作っているだけ。`confetti.browser.js` を使う。
+
+### 確かめ方
+
+**この作業環境は `cdn.tailwindcss.com` / `unpkg.com` / `cdn.jsdelivr.net` へ出られない。**
+つまり**学校のフィルタリングとまったく同じ状態**なので、
+そのまま開いて画面が出れば、CDN 依存が消えたことの証明になる。これは使える。
+
+### 39. GAS を測るときは `code.gs` の `doGet` も読む
+
+`Haiku-meeting` の viewport を「指定が無い」と読み違えた。
+実際には `code.gs` の `addMetaTag` で指定されており、しかも
+`maximum-scale=1.0, user-scalable=no` で**拡大を禁止していた**。
+
+`addMetaTag` はサーバー側の処理なので、`index.html` を手元で組み立てても再現されない。
+**「無い」と「悪い値が入っている」は直し方がまるで違う。**
+
+### 40. いちばん必要な案内が、いちばん見えないことがある
+
+`Haiku-meeting` の「うへのく／なかのく／したのく」は比 **1.48**。
+俳句のどこを書く欄かを示す案内で、**このアプリでいちばん必要な文字**だった。
+
+`Digital-Newspaper` の「タグ設定がありません」（比 4.00）も同じ形。
+**案内・空状態・エラー文は、装飾ではなく本文として測ること。**
 
 ## 次に着手するときに人間が決めること（未決）
 
