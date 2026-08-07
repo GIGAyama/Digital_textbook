@@ -2112,8 +2112,12 @@ export default function App() {
                   <button onClick={() => { closeAllMenus(); setShowStampMenu(!showStampMenu); }} title="スタンプ" className={`flex items-center gap-1.5 border-2 font-bold px-2.5 sm:px-3 py-2 rounded-xl transition-all active:scale-95 text-sm ${showStampMenu ? 'bg-amber-100 border-amber-400 text-amber-700 shadow-inner' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm'}`}>
                     <Smile size={16} /> <span className="hidden md:inline">スタンプ</span>
                   </button>
+                  {/* 右端に近いボタンなので、パネルは必ずボタンの右端に合わせて左へ開く。
+                      以前は xl 以上で左端に合わせていたが、1280〜1366px の画面では
+                      パネルの右側（英語・理社のタブと4列目のスタンプ）が画面の外に出て、
+                      Chromebook でそこだけ押せなくなっていた。 */}
                   {showStampMenu && (
-                    <div className="fixed sm:absolute top-auto sm:top-full left-1/2 sm:left-auto -translate-x-1/2 sm:translate-x-0 bottom-4 sm:bottom-auto sm:mt-2 sm:right-0 xl:left-0 xl:right-auto bg-white border border-slate-200 p-4 rounded-2xl shadow-2xl z-50 w-[min(20rem,calc(100vw-1.5rem))] animate-in fade-in slide-in-from-top-2">
+                    <div className="fixed sm:absolute top-auto sm:top-full left-1/2 sm:left-auto -translate-x-1/2 sm:translate-x-0 bottom-4 sm:bottom-auto sm:mt-2 sm:right-0 bg-white border border-slate-200 p-4 rounded-2xl shadow-2xl z-50 w-[min(20rem,calc(100vw-1.5rem))] animate-in fade-in slide-in-from-top-2">
                       <div className="flex bg-slate-100 p-1 rounded-xl mb-3 shadow-inner overflow-x-auto hide-scrollbar">
                         {STAMP_CATEGORIES.map(cat => (
                           <button key={cat.id} onClick={() => setStampTab(cat.id)} className={`flex-shrink-0 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${stampTab === cat.id ? 'bg-white shadow-sm text-amber-700' : 'text-slate-600 hover:text-slate-800'}`}>
@@ -2162,8 +2166,11 @@ export default function App() {
                 <button onClick={() => { const wasOpen = showViewMenu; closeAllMenus(); setShowViewMenu(!wasOpen); }} title="表示のしかた" className={`flex items-center gap-1.5 border-2 font-bold px-2.5 sm:px-3 py-2 rounded-xl transition-all active:scale-95 text-sm ${viewMode === 'half' || showViewMenu ? 'bg-amber-100 border-amber-400 text-amber-700 shadow-inner' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm'}`}>
                   <Columns size={16} /> <span className="hidden md:inline">表示</span>
                 </button>
+                {/* ツールバーのいちばん右のボタン。左端に合わせて開くと、
+                    1280px 前後の画面で「ページ全体を表示」の文字が画面の外に切れる。
+                    ボタンの右端に合わせて左へ開く。 */}
                 {showViewMenu && (
-                  <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 bg-white border border-slate-200 p-2 rounded-xl shadow-xl z-50 flex flex-col gap-1 w-56 animate-in fade-in slide-in-from-top-2">
+                  <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 sm:left-auto sm:right-0 sm:translate-x-0 bg-white border border-slate-200 p-2 rounded-xl shadow-xl z-50 flex flex-col gap-1 w-56 animate-in fade-in slide-in-from-top-2">
                     <button onClick={() => selectViewMode('full')} className="flex items-center justify-between gap-2 p-2.5 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 transition-colors text-left">
                       <span className="flex items-center gap-2"><BookOpen size={16} className="text-amber-500"/> ページ全体を表示</span>
                       {viewMode === 'full' && <Check size={16} className="text-amber-500 shrink-0"/>}
