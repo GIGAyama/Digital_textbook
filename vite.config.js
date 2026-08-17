@@ -2,12 +2,12 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
-// gigayama.github.io は多数のアプリで同じドメインを共有している。
-// このリポジトリ名の絶対パスから外れると、別アプリと取り違えられて
-// 「開いたら違うアプリが立ち上がる」事故が起きるため、必ずここに合わせる。
 // 独自ドメインに移り、アプリは digital-textbook.giga-school.com の直下で配信される。
-// リポジトリ名の絶対パス（旧 gigayama.github.io/Digital_textbook/ 前提）のままだと
-// 資産がすべて 404 になり、manifest の scope もページの URL を含まなくなる。
+// 以前は gigayama.github.io を多数のアプリで共有しており、取り違えを防ぐために
+// リポジトリ名の絶対パスを使っていたが、いまはアプリごとにオリジンが分かれている。
+// リポジトリ名の絶対パス（旧 /Digital_textbook/）のままだと、資産がすべて 404 になり、
+// manifest の scope もページの URL を含まなくなって PWA としてインストールできない。
+// base / id / scope / start_url / navigateFallback がここ 1 か所から決まる。
 const BASE = './'
 
 export default defineConfig({
