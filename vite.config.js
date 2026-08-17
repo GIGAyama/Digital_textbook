@@ -5,7 +5,10 @@ import { VitePWA } from 'vite-plugin-pwa'
 // gigayama.github.io は多数のアプリで同じドメインを共有している。
 // このリポジトリ名の絶対パスから外れると、別アプリと取り違えられて
 // 「開いたら違うアプリが立ち上がる」事故が起きるため、必ずここに合わせる。
-const BASE = '/Digital_textbook/'
+// 独自ドメインに移り、アプリは digital-textbook.giga-school.com の直下で配信される。
+// リポジトリ名の絶対パス（旧 gigayama.github.io/Digital_textbook/ 前提）のままだと
+// 資産がすべて 404 になり、manifest の scope もページの URL を含まなくなる。
+const BASE = './'
 
 export default defineConfig({
     plugins: [
@@ -47,7 +50,7 @@ export default defineConfig({
                 globIgnores: ['vendor/**'],
                 // 圏外で画面遷移したときはキャッシュ済みのアプリ本体を返す。
                 navigateFallback: BASE + 'index.html',
-                navigateFallbackDenylist: [/^\/Digital_textbook\/vendor\//],
+                navigateFallbackDenylist: [/(^|\/)vendor\//],
                 cleanupOutdatedCaches: true,
                 // pdf.worker.min.js が約1MBあるため、既定の2MBのままにしておく
                 maximumFileSizeToCacheInBytes: 2 * 1024 * 1024,

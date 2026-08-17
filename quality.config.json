@@ -41,9 +41,8 @@
   },
   "gigaV4": {
     "enabled": true,
-
-    "_basePath": "gigayama.github.io は多数のアプリが同一オリジンを共有している。manifest の id / scope / start_url がここから外れると、別アプリと取り違えられて『開いたら違うアプリが立ち上がる』事故が起きる。",
-    "basePath": "/Digital_textbook/",
+    "_basePath": "manifest の id/scope/start_url に期待する値。独自ドメインではアプリは digital-textbook.giga-school.com の直下で配信されるので相対パス \"./\"。vite.config.js の BASE と同じ値にすること。",
+  "basePath": "./",
 
     "_assetLimits": "画像の上限バイト数。アイコンだけで初回転送を占有しないための歯止め。",
     "assetLimits": {
