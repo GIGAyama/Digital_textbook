@@ -8,7 +8,7 @@
        Chrome は条件が揃うと即座に beforeinstallprompt を出すため、
        アプリ本体の読み込みより後だと合図を取りこぼし、通信が遅い端末で
        「アプリを入れる」ボタンが出なくなる。だから <head> の最上部に置く。 -->
-  <script src="/Digital_textbook/pwa-install-hook.js"></script>
+  <script src="./pwa-install-hook.js"></script>
 
   <!--
     ② 読み込み先を明示的に絞る（CSP）。
@@ -53,11 +53,11 @@
   <!-- 児童用アプリなので配色は固定する（端末のダークモードで色が反転すると混乱する） -->
   <meta name="color-scheme" content="light" />
 
-  <link rel="icon" type="image/png" href="/Digital_textbook/favicon.png" />
-  <link rel="icon" type="image/png" sizes="192x192" href="/Digital_textbook/pwa-192x192.png" />
-  <link rel="icon" type="image/png" sizes="512x512" href="/Digital_textbook/pwa-512x512.png" />
+  <link rel="icon" type="image/png" href="./favicon.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./pwa-192x192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="./pwa-512x512.png" />
   <!-- iOS は maskable に対応していないので、専用の四角いアイコンを渡す -->
-  <link rel="apple-touch-icon" href="/Digital_textbook/apple-touch-icon.png" />
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
 
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -65,9 +65,9 @@
   <meta name="apple-mobile-web-app-title" content="デジタル教科書" />
 
   <title>デジタル教科書メーカー</title>
-  <script type="module" crossorigin src="/Digital_textbook/assets/index-Czu7NhNK.js"></script>
-  <link rel="stylesheet" crossorigin href="/Digital_textbook/assets/index-BN6yBXli.css">
-<link rel="manifest" href="/Digital_textbook/manifest.webmanifest"></head>
+  <script type="module" crossorigin src="./assets/index-CabdgLwC.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-BN6yBXli.css">
+<link rel="manifest" href="./manifest.webmanifest"></head>
 
 <body>
   <div id="root"></div>
