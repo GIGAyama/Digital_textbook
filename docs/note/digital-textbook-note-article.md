@@ -16,7 +16,7 @@
 
 ここから使えます。
 
-https://gigayama.github.io/Digital_textbook/
+https://digital-textbook.giga-school.com/
 
 会員登録もインストールもいりません。ブラウザで開けば、その場から使えます。無料です。広告も出ません。
 
@@ -208,11 +208,11 @@ https://gigayama.github.io/Digital_textbook/
 
 まず、このアプリはインストールがいりません。ブラウザで次のアドレスを開くだけです。
 
-https://gigayama.github.io/Digital_textbook/
+https://digital-textbook.giga-school.com/
 
 そのうえで、次の三つを確認してください。
 
-1. 校内のフィルタリングで、次のアドレスへの通信を許可してください。gigayama.github.io がアプリ本体です。fonts.googleapis.com と fonts.gstatic.com は、子ども向けの読みやすい書体を取ってくるために使います。0.peerjs.com は、端末どうしをつなぐときの待ち合わせに使います。書きこんだデータそのものはここを通りません。Googleドライブとつなぐ場合は accounts.google.com と www.googleapis.com も必要です。
+1. 校内のフィルタリングで、次のアドレスへの通信を許可してください。digital-textbook.giga-school.com がアプリ本体です。fonts.googleapis.com と fonts.gstatic.com は、子ども向けの読みやすい書体を取ってくるために使います。0.peerjs.com は、端末どうしをつなぐときの待ち合わせに使います。書きこんだデータそのものはここを通りません。Googleドライブとつなぐ場合は accounts.google.com と www.googleapis.com も必要です。
 2. 共有機能を使うなら、端末どうしの直接の通信が許可されているか確認してください。ここが塞がれていると、共有だけが使えません。ほかの機能はそのまま使えます。
 3. 共用の端末で使う場合は、書きこみがその端末のなかに残ることを共有しておいてください。ブラウザの閲覧データを削除すると消えます。スキャンした教科書や指導書も同じように残るので、使い終わったら消すといった決めごとがあると安心です。
 
@@ -234,7 +234,7 @@ Googleドライブとつなぐ機能もありますが、これは先生ご自�
 
 はじめて使う先生のために、順番に書きます。
 
-1. ブラウザで https://gigayama.github.io/Digital_textbook/ を開きます。「わたしのプリント・教科書」と出れば準備完了です。
+1. ブラウザで https://digital-textbook.giga-school.com/ を開きます。「わたしのプリント・教科書」と出れば準備完了です。
 2. 右上に「アプリを入れる」というボタンが出ていたら、押してインストールしておきます。次からはアイコンから開けます。iPad の場合は Safari で開いて、共有ボタンから「ホーム画面に追加」を選びます。
 3. 「新しいPDFを追加」を押して、使いたいプリントの PDF を選びます。「PDFを読み込みました」と出れば完了です。
 4. 教科書や指導書を持ち歩きたいときは、スキャナで PDF にしてから、同じように読みこみます。単元ごとや章ごとに分けておくと、開くのも探すのも軽くすみます。

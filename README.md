@@ -4,7 +4,7 @@
 
 PDFファイルをブラウザに読み込ませるだけで、ペンやマーカーによる書き込み、ふせんの貼り付け、豊富な「教育用スタンプ」の配置が可能になります。さらに、**WebRTC（P2P通信）技術**を採用しており、クラウドサーバーを経由せずに先生の端末から児童生徒の端末へ直接データを共有（配布）できます。
 
-**公開先**: [https://gigayama.github.io/Digital_textbook/](https://gigayama.github.io/Digital_textbook/)
+**公開先**: [https://digital-textbook.giga-school.com/](https://digital-textbook.giga-school.com/)
 **先生向けの使い方**: [MANUAL.md](./MANUAL.md)
 
 ## 🧭 このアプリでできること（全体像）
@@ -87,7 +87,8 @@ PDFファイルをブラウザに読み込ませるだけで、ペンやマー�
 *   **追加 / 置き換えを選べる**: 取り込み時に、中身（冊数・ページ数・マイスタンプ数・書き出した日時）を確認したうえで「追加で取り込む（既存データは残す）」と「置き換える（既存データを破棄）」を選べるので、複数端末の内容を統合したり、まっさらな状態にリセットしたりできます。同じ教科書が重複したときは「(取込)」が付いた別の1冊として追加されます。
 
 > 💡 **Googleドライブ同期の有効化について**
-> 同期パネルは OAuth クライアントID（`VITE_GOOGLE_CLIENT_ID`）が設定されているときだけ表示されます。`src/constants.js` には公式配布先（`gigayama.github.io`）用の既定値が入っているため、上記の公開URLではそのまま使えます。
+> 同期パネルは OAuth クライアントID（`VITE_GOOGLE_CLIENT_ID`）が設定されているときだけ表示されます。`src/constants.js` には公式配布先（`digital-textbook.giga-school.com`）用の既定値が入っているため、上記の公開URLではそのまま使えます。
+> クライアントIDは、Google Cloud の「承認済みの JavaScript 生成元」に登録したオリジンからしか使えません。**公開先のドメインを変えたら、Google Cloud 側の生成元も同時に書き換えてください**（登録し忘れると、接続時に Google の画面で「エラー 400: origin_mismatch」が出ます）。
 > **このリポジトリをフォークして別のドメインで公開する場合は、自分のクライアントIDを発行し、Google Cloud の「承認済みの JavaScript 生成元」に自分の公開先を登録してください**（他人のIDのままでは接続が拒否されます）。手順は **[GOOGLE_DRIVE_SETUP.md](./GOOGLE_DRIVE_SETUP.md)** を参照してください。
 
 ### 5. PWA対応（アプリとしてインストール可能）
@@ -244,11 +245,13 @@ docs/note/                    紹介記事の原稿
     npm run dev
     ```
 
-4.  ブラウザで `http://localhost:5173/Digital_textbook/` にアクセスします
-    （`vite.config.js` の `BASE` を `/Digital_textbook/` に固定しているため、末尾のパスが必要です）。
+4.  ブラウザで `http://localhost:5173/` にアクセスします
+    （`vite.config.js` の `BASE` は相対パス `./` なので、末尾にリポジトリ名は付きません）。
 
 Googleドライブ同期をローカルで試す場合は、`.env.example` を `.env` にコピーして
 `VITE_GOOGLE_CLIENT_ID` を設定してください（`.env` は git 管理外です）。
+あわせて、Google Cloud の「承認済みの JavaScript 生成元」に `http://localhost:5173` を追加してください
+（登録していないオリジンから接続すると、Google の画面で「エラー 400: origin_mismatch」になります）。
 
 > **外部ライブラリについて**
 > pdf.js / fabric.js / idb-keyval / jsQR / PeerJS / qrcode は npm でバージョンを固定し、`scripts/sync-vendor.mjs` が `public/vendor/` へ展開します（`npm run dev` / `npm run build` の前に自動で走ります）。合計約 2MB あるため git にはコミットしていません。`npm ci` を実行すれば再現されます。
@@ -335,8 +338,8 @@ Google ドライブ連携で要求するのは `https://www.googleapis.com/auth/
 
 ## 📲 PWA について
 
-*   `manifest.webmanifest` の `id` / `scope` / `start_url` は、すべて `/Digital_textbook/` の絶対パスに固定しています。
-    `gigayama.github.io` は多数のアプリが同一オリジンを共有しているため、ここがずれると別アプリと取り違えられ、「開いたら違うアプリが立ち上がる」事故が起きます。
+*   `manifest.webmanifest` の `id` / `scope` / `start_url` は、すべて相対パス `./` に揃えています。
+    独自ドメイン（`digital-textbook.giga-school.com`）ではアプリがオリジンの直下で配信されるため、リポジトリ名の絶対パス（旧 `/Digital_textbook/`）のままだと資産が 404 になり、`scope` がページの URL を含まなくなって PWA としてインストールできません。
     **このリポジトリをコピーして新しいアプリを作るときは、`vite.config.js` の `BASE` を最初に書き換えてください。**
 *   Service Worker は Workbox（`vite-plugin-pwa`）が生成します。`localStorage` には一切触れません。キャッシュの掃除も Workbox が自分の管理下のものだけを対象にするため、同一オリジンの他アプリを壊しません。
 *   `public/vendor/`（約 2MB）は先読みキャッシュから除外し、実際に使う時点で取得して以後キャッシュします。ここを先読みに入れると、40 人が同時に開く校内 Wi-Fi で初回表示が止まります。

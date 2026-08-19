@@ -173,8 +173,9 @@ export function runGigaV4Checks(rootDir, config) {
     }
 
     // ------------------------------------------------------------------ PWA
-    // gigayama.github.io は多数のアプリが同一オリジンを共有している。
-    // id / scope / start_url がリポジトリ名の絶対パスから外れると別アプリと衝突する。
+    // id / scope / start_url が basePath から外れると、資産が 404 になり、
+    // scope がページの URL を含まなくなって PWA としてインストールできない。
+    // 同一オリジンを複数アプリで共有している場合は、別アプリとの衝突も起きる。
     if (!skip('PWA_MANIFEST')) {
         const expected = g.basePath;
         const viteConfig = read(rootDir, 'vite.config.js') || '';
