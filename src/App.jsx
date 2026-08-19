@@ -813,10 +813,17 @@ export default function App() {
         client_id: GOOGLE_CLIENT_ID,
         scope: GDRIVE_SCOPE,
         callback: () => {}, // 呼び出しごとに差し替える
+        error_callback: () => {}, //   〃
       });
     }
     return new Promise((resolve, reject) => {
+      // 一度でも決着したら、以後の呼び出しは無視する。
+      // callback と error_callback の両方が呼ばれることがあり、
+      // すでに解決した Promise を触ると状態が食い違う。
+      let settled = false;
       gisTokenClientRef.current.callback = (resp) => {
+        if (settled) return;
+        settled = true;
         if (resp && resp.error) { reject(new Error(resp.error)); return; }
         driveTokenRef.current = {
           token: resp.access_token,
@@ -825,9 +832,24 @@ export default function App() {
         setDriveConnected(true);
         resolve(resp.access_token);
       };
+      // ポップアップが開けなかった・閉じられたときは callback が呼ばれない。
+      // これが無いと Promise が永久に決着せず、「接続」ボタンが
+      // ぐるぐる回ったまま押せなくなる。Google Cloud の
+      // 「承認済みの JavaScript 生成元」に今のドメインが登録されていないと、
+      // ポップアップの中で origin_mismatch が表示され、先生はそれを閉じる。
+      // そのときここへ来る。
+      gisTokenClientRef.current.error_callback = (err) => {
+        if (settled) return;
+        settled = true;
+        reject(new Error((err && err.type) || 'popup_failed'));
+      };
       try {
         gisTokenClientRef.current.requestAccessToken({ prompt: interactive ? '' : 'none' });
-      } catch (err) { reject(err); }
+      } catch (err) {
+        if (settled) return;
+        settled = true;
+        reject(err);
+      }
     });
   }, [ensureGisLoaded]);
 
@@ -918,7 +940,17 @@ export default function App() {
       showToast('Googleドライブに接続しました', 'success');
     } catch (err) {
       console.error(err);
-      showToast('Googleドライブへの接続に失敗しました', 'error');
+      // 先生が自分で閉じた場合まで「失敗しました」と赤く出すと、
+      // 押し間違えただけなのに壊れたように見える。
+      const reason = String((err && err.message) || '');
+      if (reason === 'popup_closed') {
+        showToast('接続をとりやめました', 'info');
+      } else {
+        // ドメインを変えたのに Google Cloud の「承認済みの JavaScript 生成元」を
+        // 直していないと、ポップアップの中で origin_mismatch が出て閉じられる。
+        // 原因が画面の外にあるので、どこを見ればよいかまで出す。
+        showToast('Googleドライブへの接続に失敗しました（このアドレスがGoogle側に登録されていない可能性があります）', 'error');
+      }
     } finally {
       setDriveBusy(null);
     }

@@ -115,7 +115,7 @@ docs/note/
 ### 画像について、断っておくこと
 
 - **サンプルの PDF は撮影用に作った架空のプリントです。** 実在の教科書・ワークではありません。3年算数「あまりのある わり算」4ページと、4年国語「だんらくの つながり」2ページを、撮影のためにその場で作りました。
-- **共有画面（`19-share.png`）の URL は `http://` で写っています。** 本番は `https://gigayama.github.io/Digital_textbook/` です。撮影中だけ本番のホスト名を手もとのサーバーに向けており、そこだけ本番と見た目が異なります。気になる場合は、実機で撮り直してください。
+- **共有画面（`19-share.png`）の URL は `http://` で写っています。** 本番は `https://digital-textbook.giga-school.com/` です。撮影中だけ本番のホスト名を手もとのサーバーに向けており、そこだけ本番と見た目が異なります。気になる場合は、実機で撮り直してください。
 - **「データを受信しています」のモーダルは撮れませんでした。** 手もとの環境では受信が速すぎて（1秒未満）、モーダルが表示される前に完了してしまいます。実際の校内ネットワークでは表示されるはずなので、必要なら実機で撮り足してください。20番はその直後の「受け取り終わった画面」です。
 - 子どもの端末の画面（`20`, `21`）は、先生の端末とは別のブラウザプロファイルを立ち上げて、本当に2台つないで撮ったものです。合成ではありません。
 
@@ -132,7 +132,7 @@ docs/note/
 | 一度に配るのは10人ずつ | `README.md` の「制限とクォータ」。実測はしていないため、記事では「10人ずつくらいに分けたほうがうまくいきます」と幅を持たせた書きかたにしています |
 | 300ページを超えると止まることがある | `README.md` の「制限とクォータ」。メモリ4GBの Chromebook での挙動。実測はしていません |
 | iOS Safari の7日 | `MANUAL.md` と `README.md`。Safari の ITP の仕様 |
-| 通信を許可するアドレス | `index.html` の Content-Security-Policy をそのまま読み下したもの。`gigayama.github.io` / `fonts.googleapis.com` / `fonts.gstatic.com` / `0.peerjs.com` / `accounts.google.com` / `www.googleapis.com` |
+| 通信を許可するアドレス | `index.html` の Content-Security-Policy をそのまま読み下したもの。`digital-textbook.giga-school.com` / `fonts.googleapis.com` / `fonts.gstatic.com` / `0.peerjs.com` / `accounts.google.com` / `www.googleapis.com` |
 | Googleドライブが触れるのは自分の作ったファイルだけ | `src/constants.js` の `GDRIVE_SCOPE` が `drive.file` であること |
 | 「(共有)」が題名に付く | `src/App.jsx` の受信処理。`21-kid-library.png` で実際に確認 |
 | 前に開いていた教科書とページを覚えている | `MANUAL.md` の「PDF を読みこむ」 |
@@ -153,11 +153,11 @@ docs/note/
 撮影に使ったスクリプトは `.tmp-shots/` に置いて作業し、納品時に消しました。同じものを作り直す場合の手順です。
 
 1. 撮影の道具をまとめて入れます。`npm i --no-save playwright peer`
-2. 本番と同じ見た目にするため、本番のホスト名を手もとに向けます。`echo "127.0.0.1 gigayama.github.io" >> /etc/hosts`
+2. 本番と同じ見た目にするため、本番のホスト名を手もとに向けます。`echo "127.0.0.1 digital-textbook.giga-school.com" >> /etc/hosts`
 3. 共有機能を撮るには、待ち合わせ用のサーバーを手もとに立てます。`node <skill>/scripts/peer-server.mjs 9000`
 4. アプリ側の接続先を一時的に差しかえます。`src/App.jsx` の `new window.Peer()` を2か所とも `new window.Peer(undefined, { host: '127.0.0.1', port: 9000, path: '/', secure: false })` にして、`index.html` の CSP の `connect-src` に `http://127.0.0.1:9000` と `ws://127.0.0.1:9000` を足します。
 5. `npm run build` して、`node <skill>/scripts/serve.mjs dist 80 /Digital_textbook/` で配ります。
-6. `node <skill>/scripts/capture.mjs shots.mjs --base http://gigayama.github.io/Digital_textbook/ --out shots` で撮ります。
+6. `node <skill>/scripts/capture.mjs shots.mjs --base http://digital-textbook.giga-school.com/ --out shots` で撮ります。
 7. **4の差しかえを必ず戻して、`git status` と `git diff` で差分に残っていないか確かめてください。** ここを戻し忘れると本番の共有機能が壊れます。2の `/etc/hosts` も消します。
 
 撮影のシナリオで手こずったところを2つだけ書き残しておきます。ツールバーのアイコンだけのボタンは `title` 属性しか持たないので、文字では押せません（`button[title="えんぴつ"]` のように指定します）。それから、置いたスタンプの位置と大きさは、fabric.js の中身に触れずに知る必要があるので、置く前と置いた後のキャンバスの画素を見くらべて求めました。スタンプは中心を軸に拡大縮小されるため、角のつまみは中心からの距離で計算します。

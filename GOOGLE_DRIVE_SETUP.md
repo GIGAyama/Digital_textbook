@@ -37,14 +37,18 @@
 1. 「API とサービス」→「認証情報」→「認証情報を作成」→「**OAuth クライアント ID**」
 2. アプリケーションの種類：**ウェブアプリケーション**
 3. 「**承認済みの JavaScript 生成元**」に、アプリを公開しているURLの**オリジン**を追加します。
-   このリポジトリの GitHub Pages 公開先の場合は：
+   このリポジトリの公開先（独自ドメイン）の場合は：
 
    ```
-   https://gigayama.github.io
+   https://digital-textbook.giga-school.com
    ```
 
-   ※ 末尾にパス（`/Digital_textbook/`）は付けません。オリジン（`https://ドメイン`）だけを入れます。
+   ※ 末尾にパス（`/` や `/index.html`）は付けません。オリジン（`https://ドメイン`）だけを入れます。
    ※ 手元で `npm run dev` を試す場合は `http://localhost:5173` も追加しておくと便利です。
+   ※ **ドメインを変えたら、ここも必ず変えます。** 生成元は完全一致で照合されるため、
+     旧ドメイン（`https://gigayama.github.io`）を登録したままでは、新しいドメインからの接続は拒否されます
+     （下の「よくある質問」の `origin_mismatch` を参照）。移行期間中は新旧の両方を登録しておき、
+     旧ドメインを閉じてから古いほうを消すのが安全です。
 4. 「リダイレクト URI」は空のままで構いません（このアプリはトークン方式のため不要です）
 5. 作成すると表示される「**クライアント ID**」（`xxxxxxxx.apps.googleusercontent.com`）をコピーします
 
@@ -100,6 +104,42 @@ const GOOGLE_CLIENT_ID =
 ---
 
 ## よくある質問
+
+**Q.「アクセスをブロック: 認証エラーです」「エラー 400: origin_mismatch」と出て接続できません。**
+A. **いま開いているアドレスのオリジンが、Google Cloud の「承認済みの JavaScript 生成元」に登録されていない**ときに出ます。
+ドメインを変えた直後（例: `gigayama.github.io` → `digital-textbook.giga-school.com`）はほぼこれです。
+アプリ側の設定ではなく Google Cloud 側の設定なので、次の手順で直します。
+
+1. https://console.cloud.google.com/apis/credentials を開く
+2. 使っている **OAuth 2.0 クライアント ID**（ウェブアプリケーション）をクリック
+3. 「**承認済みの JavaScript 生成元**」に、いまの公開先のオリジンを追加する
+
+   ```
+   https://digital-textbook.giga-school.com
+   ```
+
+4. 「**保存**」を押す
+
+> 照合は**完全一致**です。次のものは別のオリジンとして扱われ、どれも `origin_mismatch` になります。
+>
+> | 入れるもの | 入れてはいけないもの |
+> |---|---|
+> | `https://digital-textbook.giga-school.com` | `https://digital-textbook.giga-school.com/`（末尾のスラッシュ） |
+> | 〃 | `https://digital-textbook.giga-school.com/index.html`（パス付き） |
+> | 〃 | `http://…`（`https` でない） |
+> | 〃 | `https://www.digital-textbook.giga-school.com`（`www.` 付きは別オリジン） |
+>
+> 反映には数分（Google の案内では最大数時間）かかることがあります。保存したのに直らないときは、
+> 少し待ってから、ブラウザのキャッシュを消して開き直してください。
+
+**Q. Cloudflare でドメインを変えました。ほかに直すところはありますか？**
+A. Google 側は上の「承認済みの JavaScript 生成元」だけです。あわせて次を確認してください。
+
+- **DNS**: 新しいホスト名の CNAME が GitHub Pages（`<ユーザー名>.github.io`）に向いていること
+- **リポジトリの `CNAME`**: `public/CNAME` に新しいドメインを1行だけ書くこと（`public/` に置くとビルド後の `dist` に入り、公開時にも残ります）
+- **GitHub の Settings → Pages → Custom domain**: 新しいドメインが入り、「Enforce HTTPS」が有効なこと
+- **Cloudflare の SSL/TLS 暗号化モード**: **Full** 以上にすること。`Flexible` だと GitHub Pages との間でリダイレクトが繰り返され、ページが開かなくなります
+- **`vite.config.js` の `BASE`**: 独自ドメインでは直下配信なので `'./'`（リポジトリ名のパスのままだと資産が 404 になります）
 
 **Q. クライアントIDを設定しないとどうなりますか？**
 A. 同期パネルは表示されず、アプリはこれまでどおり動作します。手動のJSONバックアップ（書き出す／取り込む）はいつでも使えます。
