@@ -4,7 +4,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import { Book, ChevronLeft, X, Play, Pause, RotateCcw } from 'lucide-react';
-import { APP_NAME, DEVELOPER_NAME, SNS_LINK } from '../constants.js';
+import { APP_NAME, APP_DISCLAIMER, DEVELOPER_NAME, SNS_LINK } from '../constants.js';
 
 // ==========================================
 // 3. 共通UIコンポーネント (モダン化)
@@ -20,7 +20,11 @@ export const Header = ({ onGoHome, title }) => (
       ) : (
         <div className="bg-amber-100 p-2 rounded-xl text-amber-700 shadow-inner shrink-0"><Book size={22} /></div>
       )}
-      <h1 className="text-base sm:text-xl font-bold text-slate-800 tracking-tight line-clamp-1">{title || APP_NAME}</h1>
+      <div className="min-w-0">
+        <h1 className="text-base sm:text-xl font-bold text-slate-800 tracking-tight line-clamp-1">{title || APP_NAME}</h1>
+        {/* 制度上の「学習者用デジタル教科書」と取り違えられないよう、名前のすぐ下に書く */}
+        <p className="text-[10px] sm:text-[11px] font-bold text-slate-500 leading-tight line-clamp-2">{APP_DISCLAIMER}</p>
+      </div>
     </div>
   </nav>
 );
