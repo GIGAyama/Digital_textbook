@@ -18,6 +18,30 @@ export default defineConfig({
             // 新しい版が用意できたことを画面で知らせ、押してもらってから切り替える。
             registerType: 'prompt',
             includeAssets: ['favicon.png', 'apple-touch-icon.png'],
+            // 開発サーバー（npm run dev）でも PWA を組み立てる。
+            //
+            // 既定では vite-plugin-pwa は本番ビルドのときにしか
+            // manifest.webmanifest と Service Worker を出さない。
+            // つまり npm run dev で開いている間は
+            //   ・<link rel="manifest"> が index.html に入らない
+            //   ・/sw.js を叩いても index.html が返る（SPA フォールバック）
+            // という状態で、ブラウザから見ると「インストールできるサイト」の
+            // 条件を満たさない。結果、Chrome のアドレスバー右端に出る
+            // インストールボタンが開発中はいつまでも出ず、
+            // beforeinstallprompt も飛ばないのでアプリ内の
+            // 「アプリを入れる」ボタンも出ない。
+            //
+            // 直せるのは設定だけなので、開発時も本番と同じ形を配る。
+            // type: 'module' は、開発用の Service Worker が Vite の
+            // ES モジュールのまま配信されるため（classic だと import で落ちる）。
+            devOptions: {
+                enabled: true,
+                type: 'module',
+                navigateFallback: 'index.html',
+                // 開発用の Service Worker は中身を先読みキャッシュしないので、
+                // workbox の「precache が空」という警告が毎回出る。実害はない。
+                suppressWarnings: true,
+            },
             manifest: {
                 id: BASE,
                 name: 'デジタル教科書メーカー',

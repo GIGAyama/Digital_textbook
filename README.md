@@ -248,6 +248,13 @@ docs/note/                    紹介記事の原稿
 4.  ブラウザで `http://localhost:5173/` にアクセスします
     （`vite.config.js` の `BASE` は相対パス `./` なので、末尾にリポジトリ名は付きません）。
 
+開発サーバーでも manifest と Service Worker を配るようにしてあるため
+（`vite.config.js` の `devOptions`）、`npm run dev` のままでも
+**アドレスバー右端のインストールボタン**と、アプリ内の「アプリを入れる」ボタンが出ます。
+どちらもページの `load` の後にブラウザが判定するので、表示まで数秒かかります。
+Service Worker が古いまま残って挙動が変わったときは、
+DevTools の Application → Service Workers で「Unregister」してから再読み込みしてください。
+
 Googleドライブ同期をローカルで試す場合は、`.env.example` を `.env` にコピーして
 `VITE_GOOGLE_CLIENT_ID` を設定してください（`.env` は git 管理外です）。
 あわせて、Google Cloud の「承認済みの JavaScript 生成元」に `http://localhost:5173` を追加してください
@@ -346,6 +353,14 @@ Google ドライブ連携で要求するのは `https://www.googleapis.com/auth/
 *   更新は `registerType: 'prompt'` です。新しい版が用意できると「あたらしい バージョンが あります」の帯が出て、押してもらってから切り替えます。書き込みの途中で黙ってリロードされるのを避けるためです。
 *   `offline.html` を同梱しています。圏外でも「壊れた」と思わせない案内を、アプリと同じ配色・フォントで表示します。
 *   iOS Safari には `beforeinstallprompt` がありません。「共有 → ホーム画面に追加」の手順は MANUAL.md に記載しています。
+*   `devOptions` で、開発サーバーでも manifest と Service Worker を配っています。
+    既定では本番ビルドのときにしか出ないため、`npm run dev` の間は
+    `<link rel="manifest">` が入らず `/sw.js` も引けません。
+    ブラウザから見るとインストールできるサイトの条件を満たさないので、
+    アドレスバーのインストールボタンが開発中はいつまでも出ず、
+    `beforeinstallprompt` も飛ばないためアプリ内の「アプリを入れる」ボタンも出ませんでした。
+    インストールまわりを直すたびに毎回ビルドして確かめるのは現実的ではないので、
+    開発時も本番と同じ形を配ります。
 
 ## 👤 開発者
 
