@@ -14,8 +14,12 @@ import {
 // 定数・スタンプのデータ・fabric まわりの道具・画面の枠は別ファイルへ分けてある。
 // このファイルには「アプリの流れ」だけを残す。
 import {
-  APP_NAME,
+  APP_NAME, APP_DISCLAIMER, COPYRIGHT_NOTICE,
   DB_KEY_TEXTBOOKS, DB_KEY_DRAWINGS, DB_KEY_MYSTAMPS, DB_KEY_LAST_OPENED, DB_KEY_VIEW_MODE,
+  DB_KEY_NOTICE_SEEN,
+  SHARE_PASSCODE_CHARS, SHARE_PASSCODE_LENGTH, SHARE_MAX_AUTH_ATTEMPTS,
+  SHARE_EXPIRY_OPTIONS, SHARE_DEFAULT_EXPIRY_MIN,
+  SHARE_MAX_RECEIVERS_OPTIONS, SHARE_DEFAULT_MAX_RECEIVERS,
   BACKUP_FORMAT, BACKUP_VERSION,
   GOOGLE_CLIENT_ID, GDRIVE_SCOPE, GDRIVE_FILE_NAME, GIS_SRC,
   DB_KEY_DRIVE_FILE_ID, DB_KEY_DRIVE_AUTOSAVE, DB_KEY_DRIVE_LAST_SYNC,
@@ -29,6 +33,41 @@ import { StampPreview, createPremiumStamp } from './data/sealStamps.jsx';
 import { serializeCanvas, isSafeUrl, applyCanvasMode, createMathShape } from './lib/fabricHelpers.js';
 import { useExternalScripts } from './hooks/useExternalScripts.js';
 import { Header, Footer, TimerPanel } from './components/Chrome.jsx';
+
+// ==========================================
+// P2P共有の合言葉まわり（画面の状態を持たないのでコンポーネントの外に置く）
+// ==========================================
+
+// 合言葉を作る。Math.random は次の値を言い当てられることがあるので使わない。
+// 見まちがえやすい 0/O・1/I/L は SHARE_PASSCODE_CHARS の側で外してある。
+const createSharePasscode = () => {
+  const chars = SHARE_PASSCODE_CHARS;
+  // 乱数を文字数で割った余りをそのまま使うと、若い番号の文字だけが出やすくなる。
+  // 32bit の範囲を文字数でちょうど割り切れるところまでに限り、
+  // はみ出した値は引き直すことで、どの文字も同じ確率で出るようにする。
+  const limit = Math.floor(4294967296 / chars.length) * chars.length;
+  const buf = new Uint32Array(1);
+  let out = '';
+  while (out.length < SHARE_PASSCODE_LENGTH) {
+    crypto.getRandomValues(buf);
+    if (buf[0] >= limit) continue;
+    out += chars[buf[0] % chars.length];
+  }
+  return out;
+};
+
+// 児童生徒が入力した合言葉をそろえる。
+// 小文字で打っても、間に空白やハイフンを入れても通るようにする。
+const normalizePasscode = (value) =>
+  String(value || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+
+// 残り時間を「12:34」の形にする
+const formatRemaining = (ms) => {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(total / 60).toString();
+  const sec = (total % 60).toString().padStart(2, '0');
+  return `${m}:${sec}`;
+};
 
 // ==========================================
 // メインアプリケーション
@@ -51,6 +90,21 @@ export default function App() {
   const [shareMode, setShareMode] = useState('none'); // 'none', 'hosting', 'receiving'
   const [shareUrl, setShareUrl] = useState('');
   const [shareStatus, setShareStatus] = useState('');
+  // 先生の画面に出す合言葉。URL・QRコードには入れず、口頭か板書で伝えてもらう。
+  const [sharePasscode, setSharePasscode] = useState('');
+  const [shareExpiryMin, setShareExpiryMin] = useState(SHARE_DEFAULT_EXPIRY_MIN);
+  const [shareExpiresAt, setShareExpiresAt] = useState(0);
+  const [shareRemainingMs, setShareRemainingMs] = useState(0);
+  const [shareMaxReceivers, setShareMaxReceivers] = useState(SHARE_DEFAULT_MAX_RECEIVERS);
+  const [shareReceivedCount, setShareReceivedCount] = useState(0);
+  // 接続してきた相手を調べる処理は、共有を始めた時点の値を握ったまま動き続ける。
+  // 途中で先生が期限や人数を変えても最新の値で判定できるよう、ref に置く。
+  const shareGuardRef = useRef({ passcode: '', expiresAt: 0, maxReceivers: SHARE_DEFAULT_MAX_RECEIVERS, count: 0 });
+  // 受信側（児童生徒）が合言葉を入れる画面の状態
+  const [guestNeedsPasscode, setGuestNeedsPasscode] = useState(false);
+  const [guestPasscodeInput, setGuestPasscodeInput] = useState('');
+  const [guestError, setGuestError] = useState('');
+  const [guestSending, setGuestSending] = useState(false);
   const peerRef = useRef(null);
   const connRef = useRef(null);
   const qrCanvasRef = useRef(null);
@@ -65,7 +119,7 @@ export default function App() {
 
   // 表示モード: 'full' = ページ全体 / 'half' = 縦画面向けにページを中央で分割して半分ずつ表示
   const [viewMode, setViewMode] = useState('full');
-  const [halfOrder, setHalfOrder] = useState('ltr'); // 'ltr' = 左から先 / 'rtl' = 右から先 (国語など右開きの教科書用)
+  const [halfOrder, setHalfOrder] = useState('ltr'); // 'ltr' = 左から先 / 'rtl' = 右から先 (国語など右開きの教材用)
   const [halfSide, setHalfSide] = useState('left'); // 現在表示している側
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [historyTrigger, setHistoryTrigger] = useState(0); // Undo/Redo UI更新用
@@ -82,7 +136,7 @@ export default function App() {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showPageJump, setShowPageJump] = useState(false);
   const [showViewMenu, setShowViewMenu] = useState(false);
-  // 教科書画面ではツールバーを常時表示せず、必要なときだけ呼び出せるようにする
+  // 教材画面ではツールバーを常時表示せず、必要なときだけ呼び出せるようにする
   const [showToolbar, setShowToolbar] = useState(false);
   // 提示モード（電子黒板で一斉授業に使うとき、教室の後ろの席から読める大きさにする）
   const [isPresentation, setIsPresentation] = useState(false);
@@ -92,6 +146,16 @@ export default function App() {
   // Custom Dialog & Toast
   const [dialog, setDialog] = useState(null);
   const [toast, setToast] = useState(null);
+
+  // 取り込んでよい資料の範囲についての注意。
+  // 初めて開いたときに一度だけ出し、読んだことを覚えておく。
+  const [showUsageNotice, setShowUsageNotice] = useState(() => {
+    try { return localStorage.getItem(DB_KEY_NOTICE_SEEN) !== '1'; } catch (e) { return true; }
+  });
+  const acceptUsageNotice = () => {
+    try { localStorage.setItem(DB_KEY_NOTICE_SEEN, '1'); } catch (e) {}
+    setShowUsageNotice(false);
+  };
 
   // Refs
   const canvasRef = useRef(null);
@@ -134,7 +198,7 @@ export default function App() {
     setShowStampMenu(false); setShowShapeMenu(false); setShowStickyMenu(false); setShowLinkMenu(false); setShowPageJump(false); setShowViewMenu(false);
   }, []);
 
-  // 教科書画面から一覧(ホーム)へ戻る。ボタンと「戻る」操作で共通に使う
+  // 教材画面から一覧(ホーム)へ戻る。ボタンと「戻る」操作で共通に使う
   const goToLibrary = useCallback(() => {
     closeAllMenus();
     setShowTimer(false);
@@ -385,7 +449,7 @@ export default function App() {
         if (savedBooks) setTextbooks(savedBooks);
         if (savedDrawings) drawingsRef.current = savedDrawings;
         
-        // 各教科書のページ履歴のロード
+        // 各教材のページ履歴のロード
         const savedHistory = localStorage.getItem('digital_textbook_page_history');
         let parsedHistory = {};
         if (savedHistory) {
@@ -406,7 +470,7 @@ export default function App() {
     initDB();
   }, [scriptsLoaded]);
 
-  // 開いている教科書・ページの保存
+  // 開いている教材・ページの保存
   useEffect(() => {
     if (!isDataLoaded) return;
     if (currentTextbookId !== null) {
@@ -423,6 +487,7 @@ export default function App() {
 
   // --- P2P Share Logic ---
   // 受信側の処理（URLに ?host=ID がある場合）
+  // 接続しただけではデータは届かない。合言葉を送って認められて初めて送られてくる。
   useEffect(() => {
     if (!isDataLoaded || !scriptsLoaded || !window.Peer) return;
     const urlParams = new URLSearchParams(window.location.search);
@@ -430,25 +495,56 @@ export default function App() {
     
     if (hostId && shareMode === 'none') {
       setShareMode('receiving');
-      setShareStatus('ホストに接続しています...');
+      setShareStatus('先生の端末に接続しています...');
       
       const peer = new window.Peer();
+      peerRef.current = peer;
       peer.on('open', () => {
         const conn = peer.connect(hostId, { reliable: true });
+        connRef.current = conn;
         
         conn.on('open', () => {
-          setShareStatus('データをダウンロード中...');
+          setShareStatus('先生の画面に出ている合言葉を入れてください');
+          setGuestNeedsPasscode(true);
         });
         
         conn.on('data', async (data) => {
+          // 合言葉を求められた（つながった直後に先生の端末から届く）
+          if (data && data.type === 'need-passcode') {
+            setShareStatus('先生の画面に出ている合言葉を入れてください');
+            setGuestNeedsPasscode(true);
+            return;
+          }
+          // 断られた。理由を子どもにも分かる言葉で出す。
+          if (data && data.type === 'denied') {
+            setGuestSending(false);
+            if (data.reason === 'full') {
+              setGuestError('受け取れる人数がいっぱいです。先生に知らせてください。');
+              setGuestNeedsPasscode(false);
+            } else if (data.reason === 'expired') {
+              setGuestError('この共有は時間が終わっています。先生に知らせてください。');
+              setGuestNeedsPasscode(false);
+            } else if (data.reason === 'locked') {
+              setGuestError('合言葉を' + SHARE_MAX_AUTH_ATTEMPTS + '回まちがえました。先生に確かめて、もう一度QRコードを読み取ってください。');
+              setGuestNeedsPasscode(false);
+            } else {
+              setGuestError('合言葉がちがいます。もう一度入れてください。');
+            }
+            return;
+          }
+          // ここから先が本体のデータ
+          const payload = data && data.type === 'share-data' ? data.payload : null;
+          if (!payload || !Array.isArray(payload.pages) || payload.pages.length === 0) return;
+          setGuestNeedsPasscode(false);
+          setGuestSending(false);
           setShareStatus('データを保存中...');
           try {
             const newId = 'tb_' + Date.now();
             const newTb = { 
               id: newId, 
-              title: data.title + ' (共有)', 
-              coverImage: data.pages[0], 
-              pages: data.pages 
+              title: payload.title + ' (共有)', 
+              coverImage: payload.pages[0], 
+              pages: payload.pages 
             };
             
             // 既存データとマージして保存
@@ -457,7 +553,7 @@ export default function App() {
             await window.idbKeyval.set(DB_KEY_TEXTBOOKS, newTextbooks);
             
             const updatedDrawings = await window.idbKeyval.get(DB_KEY_DRAWINGS) || {};
-            updatedDrawings[newId] = data.drawings;
+            updatedDrawings[newId] = payload.drawings;
             await window.idbKeyval.set(DB_KEY_DRAWINGS, updatedDrawings);
             
             // 状態の更新
@@ -488,15 +584,22 @@ export default function App() {
       // (これがないと受信モーダルが永久に閉じられなくなる)
       peer.on('error', (err) => {
         console.error("Peer接続エラー:", err);
-        showToast("ホストに接続できませんでした。共有元の画面が開いているか確認してください。", "error");
+        showToast("先生の端末につながりませんでした。共有の画面が開いているか確認してください。", "error");
         window.history.replaceState({}, document.title, window.location.pathname);
         setShareMode('none');
+        setGuestNeedsPasscode(false);
         peer.destroy();
       });
     }
   }, [isDataLoaded, scriptsLoaded, showToast, shareMode]);
 
   // ホスト側（先生）の処理
+  //
+  // つないできた相手にいきなり送らない。相手から合言葉が届き、
+  //   ・合言葉が合っている
+  //   ・共有の時間内である
+  //   ・配った人数が上限に達していない
+  // の3つがそろったときだけ、教材のデータを送る。
   const startHosting = () => {
     if (!currentTextbookId || !window.Peer) return;
     
@@ -506,6 +609,13 @@ export default function App() {
       drawingsRef.current[currentTextbookId][currentPage] = serializeCanvas(fabricRef.current);
     }
 
+    const passcode = createSharePasscode();
+    const expiresAt = Date.now() + shareExpiryMin * 60 * 1000;
+    shareGuardRef.current = { passcode, expiresAt, maxReceivers: shareMaxReceivers, count: 0 };
+    setSharePasscode(passcode);
+    setShareExpiresAt(expiresAt);
+    setShareRemainingMs(expiresAt - Date.now());
+    setShareReceivedCount(0);
     setShareMode('hosting');
     setShareStatus('共有用のURLを作成中...');
     
@@ -516,22 +626,52 @@ export default function App() {
       const url = new URL(window.location.href);
       url.searchParams.set('host', id);
       setShareUrl(url.toString());
-      setShareStatus('待機中... URLを共有してください。');
+      setShareStatus('待機中... URLと合言葉を伝えてください。');
     });
 
     peer.on('connection', (conn) => {
       connRef.current = conn;
-      setShareStatus('受信者と接続しました。データを送信中...');
-      
+      // 1本の接続ごとに数える。何度も入れ直して当てられないようにする。
+      let attempts = 0;
+      let authorized = false;
+
+      // つながっただけでは何も渡さない。まず合言葉を求める。
       conn.on('open', () => {
-        const dataToShare = {
-          title: currentTextbook.title,
-          pages: currentTextbook.pages,
-          drawings: drawingsRef.current[currentTextbookId] || {}
+        conn.send({ type: 'need-passcode' });
+      });
+
+      conn.on('data', (msg) => {
+        if (authorized) return;                       // 送るのは1接続につき1回だけ
+        if (!msg || msg.type !== 'auth') return;      // 想定外のデータは黙って捨てる
+
+        const guard = shareGuardRef.current;
+        const deny = (reason) => {
+          conn.send({ type: 'denied', reason });
+          // 断りの合図が届く前に切ると相手に理由が出ないので、少し待ってから閉じる
+          if (reason !== 'passcode') setTimeout(() => { try { conn.close(); } catch (e) {} }, 500);
         };
-        // 大容量データ送信
-        conn.send(dataToShare);
-        setShareStatus('送信完了！ (複数人に送る場合はこのまま待機してください)');
+
+        if (Date.now() > guard.expiresAt) { deny('expired'); return; }
+        if (guard.count >= guard.maxReceivers) { deny('full'); return; }
+
+        if (normalizePasscode(msg.passcode) !== guard.passcode) {
+          attempts += 1;
+          deny(attempts >= SHARE_MAX_AUTH_ATTEMPTS ? 'locked' : 'passcode');
+          return;
+        }
+
+        authorized = true;
+        guard.count += 1;
+        setShareReceivedCount(guard.count);
+        conn.send({
+          type: 'share-data',
+          payload: {
+            title: currentTextbook.title,
+            pages: currentTextbook.pages,
+            drawings: drawingsRef.current[currentTextbookId] || {}
+          }
+        });
+        setShareStatus(`${guard.count}人めに送りました。`);
       });
     });
 
@@ -541,10 +681,67 @@ export default function App() {
     });
   };
 
-  const stopHosting = () => {
+  const stopHosting = useCallback(() => {
     if (peerRef.current) peerRef.current.destroy();
+    peerRef.current = null;
+    connRef.current = null;
+    // 合言葉は使い回さない。次に共有するときは必ず作り直す。
+    shareGuardRef.current = { passcode: '', expiresAt: 0, maxReceivers: shareMaxReceivers, count: 0 };
     setShareMode('none');
     setShareUrl('');
+    setSharePasscode('');
+    setShareExpiresAt(0);
+    setShareRemainingMs(0);
+  }, [shareMaxReceivers]);
+
+  // 共有の有効期限。1秒ごとに残り時間を数え直し、0になったら自動で終了する。
+  // 先生が終わらせ忘れても、授業が終わればひとりでに配布が止まる。
+  useEffect(() => {
+    if (shareMode !== 'hosting' || !shareExpiresAt) return;
+    const tick = () => {
+      const left = shareExpiresAt - Date.now();
+      setShareRemainingMs(left > 0 ? left : 0);
+      if (left <= 0) {
+        stopHosting();
+        showToast("時間になったので共有を終了しました", "info");
+      }
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [shareMode, shareExpiresAt, stopHosting, showToast]);
+
+  // 共有中に「有効期限」を変えたら、その時点から数え直す
+  const changeShareExpiry = (minutes) => {
+    setShareExpiryMin(minutes);
+    if (shareMode === 'hosting') {
+      const next = Date.now() + minutes * 60 * 1000;
+      shareGuardRef.current.expiresAt = next;
+      setShareExpiresAt(next);
+    }
+  };
+
+  // 共有中に「人数の上限」を変えたら、次につないでくる人からすぐ効く
+  const changeShareMaxReceivers = (count) => {
+    setShareMaxReceivers(count);
+    shareGuardRef.current.maxReceivers = count;
+  };
+
+  // 受信側（児童生徒）が合言葉を送る
+  const submitGuestPasscode = (e) => {
+    e.preventDefault();
+    const code = normalizePasscode(guestPasscodeInput);
+    if (code.length !== SHARE_PASSCODE_LENGTH) {
+      setGuestError(`合言葉は${SHARE_PASSCODE_LENGTH}文字です`);
+      return;
+    }
+    if (!connRef.current || !connRef.current.open) {
+      setGuestError('つながりが切れました。もう一度QRコードを読み取ってください。');
+      return;
+    }
+    setGuestError('');
+    setGuestSending(true);
+    connRef.current.send({ type: 'auth', passcode: code });
   };
 
   // URLが変わったらQRコードを生成
@@ -643,7 +840,7 @@ export default function App() {
   const handleExportBackup = useCallback(async () => {
     if (!isDataLoaded) return;
     if (textbooks.length === 0) {
-      showToast("エクスポートする教科書がありません", "error");
+      showToast("エクスポートする教材がありません", "error");
       return;
     }
     setIsExporting(true);
@@ -902,7 +1099,7 @@ export default function App() {
     const existingId = await findDriveFileId();
     const metadata = existingId
       ? {}
-      : { name: GDRIVE_FILE_NAME, mimeType: 'application/json', description: 'デジタル教科書メーカーのバックアップ' };
+      : { name: GDRIVE_FILE_NAME, mimeType: 'application/json', description: `${APP_NAME}のバックアップ` };
     const initUrl = existingId
       ? `https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=resumable`
       : `https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable`;
@@ -970,7 +1167,7 @@ export default function App() {
   const handleDriveSave = useCallback(async () => {
     if (!driveEnabled || !isDataLoaded) return;
     if (textbooks.length === 0) {
-      showToast('保存する教科書がありません', 'error');
+      showToast('保存する教材がありません', 'error');
       return;
     }
     setDriveBusy('saving');
@@ -1037,8 +1234,8 @@ export default function App() {
   const deleteTextbook = (id, e) => {
     e.stopPropagation();
     showConfirm(
-      "教科書の削除", 
-      "この教科書とすべての書き込みデータを完全に削除します。よろしいですか？", 
+      "教材の削除", 
+      "この教材とすべての書き込みデータを完全に削除します。よろしいですか？", 
       async () => {
         const newTextbooks = textbooks.filter(tb => tb.id !== id);
         setTextbooks(newTextbooks);
@@ -1053,7 +1250,7 @@ export default function App() {
           localStorage.setItem('digital_textbook_page_history', JSON.stringify(next));
           return next;
         });
-        showToast("教科書を削除しました", "success");
+        showToast("教材を削除しました", "success");
       },
       "削除する",
       true
@@ -1141,7 +1338,7 @@ export default function App() {
 
   // --- Fabric.js Setup ---
   useEffect(() => {
-    // ページ・教科書の切り替え前に、書きかけの保存を必ず確定させる
+    // ページ・教材の切り替え前に、書きかけの保存を必ず確定させる
     // (この時点のキャンバスにはまだ「前のページ」の内容が残っている)
     commitPendingSave();
 
@@ -1635,7 +1832,7 @@ export default function App() {
     // 3. 全画面表示 → 通常表示
     if (isFullscreen) { toggleFullscreen(); return; }
 
-    // 4. 教科書の画面 → 一覧
+    // 4. 教材の画面 → 一覧
     if (currentTextbookId) { goToLibrary(); return; }
 
     // 5. 一覧が最初の画面。アプリを終了させないため、ここでは何もせず知らせるだけ
@@ -1877,7 +2074,7 @@ export default function App() {
 
   return (
     <div className="h-dvh w-full flex flex-col bg-slate-100 overflow-hidden relative">
-      {/* ヘッダーはトップの教科書選択画面でのみ表示し、教科書画面では非表示にする */}
+      {/* ヘッダーはトップの教材選択画面でのみ表示し、教材画面では非表示にする */}
       {!currentTextbookId && <Header onGoHome={null} title={null} />}
       
       {/* --- ホーム画面 --- */}
@@ -1885,7 +2082,7 @@ export default function App() {
         <main className="flex-grow overflow-auto p-6 md:p-10 bg-amber-50/40">
           <div className="max-w-6xl mx-auto animate-in fade-in zoom-in-95 duration-300">
             <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
-              <h2 className="text-3xl font-bold text-slate-800 flex items-center gap-3 drop-shadow-sm"><BookOpen size={36} className="text-amber-500" /> わたしのプリント・教科書</h2>
+              <h2 className="text-3xl font-bold text-slate-800 flex items-center gap-3 drop-shadow-sm"><BookOpen size={36} className="text-amber-500" /> わたしのプリント・教材</h2>
               <div className="flex flex-wrap items-center gap-2">
                 {/* アプリとして入れてもらうためのボタン。
                     ブラウザのアドレスバーの小さなアイコンは児童には見つけられないので、
@@ -1903,7 +2100,7 @@ export default function App() {
                 <button
                   onClick={handleExportBackup}
                   disabled={isExporting || textbooks.length === 0}
-                  title="教科書・書き込みをJSONファイルとして書き出し、Googleドライブ等に保存できます"
+                  title="教材・書き込みをJSONファイルとして書き出し、Googleドライブ等に保存できます"
                   className="flex items-center gap-1.5 bg-white border-2 border-blue-200 hover:border-blue-400 hover:bg-blue-50 text-blue-600 font-bold px-4 py-2 rounded-xl transition-all active:scale-95 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
@@ -1998,7 +2195,7 @@ export default function App() {
               <span>
                 {driveEnabled
                   ? '「Googleドライブに接続」すると、ボタン1つでデータを保存でき、別の端末で同じアカウントに接続して「ドライブから復元」するだけで同期できます。JSONファイルの書き出し／取り込みも引き続き利用できます。'
-                  : '書き出したJSONファイルをGoogleドライブに保存しておけば、別の端末でログインして同じファイルを「取り込む」ことで、教科書・書き込み・マイスタンプをまるごと復元できます。'}
+                  : '書き出したJSONファイルをGoogleドライブに保存しておけば、別の端末でログインして同じファイルを「取り込む」ことで、教材・書き込み・マイスタンプをまるごと復元できます。'}
               </span>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
@@ -2037,7 +2234,7 @@ export default function App() {
       {/* --- エディタ画面 --- */}
       {currentTextbookId && (
         <>
-          {/* 教科書画面の操作ボタン群 (ツールバー非表示時のみ表示) */}
+          {/* 教材画面の操作ボタン群 (ツールバー非表示時のみ表示) */}
           {!showToolbar && (
             <div className="absolute top-3 left-3 z-40 flex items-center gap-2 animate-in fade-in">
               <button
@@ -2405,15 +2602,61 @@ export default function App() {
       {/* P2P ホスティング（共有元）モーダル */}
       {shareMode === 'hosting' && (
         <div role="dialog" aria-modal="true" aria-label="データを共有する" className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[500] p-4 animate-in fade-in">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 md:p-8 text-center animate-in zoom-in-95">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 md:p-8 text-center animate-in zoom-in-95 max-h-[90dvh] overflow-y-auto">
             <div className="mx-auto bg-emerald-100 text-emerald-700 w-12 h-12 rounded-full flex items-center justify-center mb-3">
               <Share2 size={24} />
             </div>
-            <h3 className="font-bold text-xl mb-2 text-slate-800">デジタル教科書を共有</h3>
-            <p className="text-slate-500 font-bold text-xs mb-5">
-              以下のURLかQRコードを児童生徒に共有してください。<br/>
+            <h3 className="font-bold text-xl mb-2 text-slate-800">教材を共有</h3>
+            <p className="text-slate-500 font-bold text-xs mb-4">
+              下のURLかQRコードを児童生徒に配り、<b className="text-slate-700">合言葉は口で言うか黒板に書いて</b>伝えてください。<br/>
               <span className="text-red-500">※全員が開き終わるまで、この画面は閉じないでください。</span>
             </p>
+
+            {/* 合言葉。URL・QRコードには入れていない。
+                入れてしまうと、URLを手に入れた人が誰でも受け取れる今までと同じになる。 */}
+            <div className="mb-4 rounded-2xl border-2 border-amber-300 bg-amber-50 p-3">
+              <div className="text-[11px] font-bold text-amber-800 mb-1">あいことば（口頭・板書で伝える）</div>
+              <div className="text-3xl font-mono font-bold tracking-[0.3em] text-slate-800 select-all" aria-label={`あいことば ${sharePasscode.split('').join(' ')}`}>
+                {sharePasscode}
+              </div>
+              <div className="text-[11px] font-bold text-amber-800 mt-1">QRコードとURLには入っていません</div>
+            </div>
+
+            {/* 配布の条件。共有中でも変えられる。 */}
+            <div className="grid grid-cols-2 gap-2 mb-4 text-left">
+              <label className="text-[11px] font-bold text-slate-600">
+                共有をやめる時間
+                <select
+                  value={shareExpiryMin}
+                  onChange={(e) => changeShareExpiry(Number(e.target.value))}
+                  className="mt-1 w-full bg-white border-2 border-slate-200 rounded-xl px-2 py-1.5 text-sm font-bold text-slate-700"
+                >
+                  {SHARE_EXPIRY_OPTIONS.map((m) => <option key={m} value={m}>{m}分</option>)}
+                </select>
+              </label>
+              <label className="text-[11px] font-bold text-slate-600">
+                配れる人数の上限
+                <select
+                  value={shareMaxReceivers}
+                  onChange={(e) => changeShareMaxReceivers(Number(e.target.value))}
+                  className="mt-1 w-full bg-white border-2 border-slate-200 rounded-xl px-2 py-1.5 text-sm font-bold text-slate-700"
+                >
+                  {SHARE_MAX_RECEIVERS_OPTIONS.map((n) => <option key={n} value={n}>{n}人</option>)}
+                </select>
+              </label>
+            </div>
+
+            {/* いま何人が受け取ったか。知らないうちに配られていないか、ここで気づける。 */}
+            <div className="flex items-center justify-between gap-2 mb-4 px-3 py-2 rounded-xl bg-slate-100 border border-slate-200 text-sm font-bold">
+              <span className="text-slate-600">受け取った人数</span>
+              <span className={shareReceivedCount >= shareMaxReceivers ? 'text-red-500' : 'text-emerald-700'}>
+                {shareReceivedCount} / {shareMaxReceivers} 人
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-2 mb-4 px-3 py-2 rounded-xl bg-slate-100 border border-slate-200 text-sm font-bold">
+              <span className="text-slate-600">のこり時間</span>
+              <span className={shareRemainingMs < 60000 ? 'text-red-500' : 'text-slate-700'}>{formatRemaining(shareRemainingMs)}</span>
+            </div>
             
             {shareUrl ? (
               <>
@@ -2432,7 +2675,7 @@ export default function App() {
                     <Copy size={18} />
                   </button>
                 </div>
-                <div className="text-xs font-bold text-emerald-700 bg-emerald-50 py-2 px-4 rounded-full inline-block mb-6 animate-pulse">
+                <div className="text-xs font-bold text-emerald-700 bg-emerald-50 py-2 px-4 rounded-full inline-block mb-6">
                   {shareStatus}
                 </div>
               </>
@@ -2450,13 +2693,53 @@ export default function App() {
         </div>
       )}
 
-      {/* P2P 受信中モーダル */}
+      {/* P2P 受信中モーダル（合言葉を入れてもらう画面） */}
       {shareMode === 'receiving' && (
-        <div role="dialog" aria-modal="true" aria-label="データを受信しています" className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[500] p-4 animate-in fade-in">
+        <div role="dialog" aria-modal="true" aria-label="データを受け取る" className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[500] p-4 animate-in fade-in">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 text-center flex flex-col items-center">
-             <Loader2 className="animate-spin text-emerald-500 mb-4" size={48} />
-             <h3 className="font-bold text-xl mb-2 text-slate-800">データを受信しています</h3>
-             <p className="text-slate-500 font-bold text-sm animate-pulse">{shareStatus}</p>
+            {guestNeedsPasscode ? (
+              <form onSubmit={submitGuestPasscode} className="w-full">
+                <div className="mx-auto bg-amber-100 text-amber-700 w-12 h-12 rounded-full flex items-center justify-center mb-3">
+                  <Share2 size={24} />
+                </div>
+                <h3 className="font-bold text-xl mb-1 text-slate-800">あいことばを入れてね</h3>
+                <p className="text-slate-500 font-bold text-xs mb-4">先生の画面に出ている{SHARE_PASSCODE_LENGTH}文字を入れます。</p>
+                <input
+                  type="text"
+                  value={guestPasscodeInput}
+                  onChange={(e) => setGuestPasscodeInput(e.target.value)}
+                  autoFocus
+                  autoComplete="off"
+                  autoCapitalize="characters"
+                  spellCheck={false}
+                  inputMode="text"
+                  maxLength={SHARE_PASSCODE_LENGTH + 4}
+                  aria-label="あいことば"
+                  className="w-full text-center text-2xl font-mono font-bold tracking-[0.3em] uppercase bg-slate-50 border-2 border-slate-300 focus:border-amber-400 outline-none rounded-2xl px-3 py-3 mb-3 text-slate-800"
+                />
+                {guestError && <p className="text-red-500 font-bold text-xs mb-3">{guestError}</p>}
+                <button
+                  type="submit"
+                  disabled={guestSending}
+                  className="w-full py-3 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
+                >
+                  {guestSending ? <Loader2 className="animate-spin" size={18} /> : <Check size={18} />}
+                  うけとる
+                </button>
+              </form>
+            ) : guestError ? (
+              <>
+                <AlertCircle className="text-red-500 mb-4" size={48} />
+                <h3 className="font-bold text-xl mb-2 text-slate-800">うけとれませんでした</h3>
+                <p className="text-slate-500 font-bold text-sm">{guestError}</p>
+              </>
+            ) : (
+              <>
+                <Loader2 className="animate-spin text-emerald-500 mb-4" size={48} />
+                <h3 className="font-bold text-xl mb-2 text-slate-800">データを受け取っています</h3>
+                <p className="text-slate-500 font-bold text-sm animate-pulse">{shareStatus}</p>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -2534,7 +2817,7 @@ export default function App() {
                   <MousePointer2 size={16} className="text-sky-500" /> スマホ・タブレットで「ページ送り」
                 </div>
                 <ul className="text-xs font-bold text-slate-500 leading-relaxed list-disc pl-5 space-y-0.5">
-                  <li>選択モードのとき、教科書の上を左へスワイプで次のページ</li>
+                  <li>選択モードのとき、教材の上を左へスワイプで次のページ</li>
                   <li>同じく、右へスワイプで前のページ</li>
                 </ul>
                 <p className="text-[11px] font-bold text-slate-600 mt-2 leading-relaxed">
@@ -2553,7 +2836,7 @@ export default function App() {
                   <li>画面の左右どちらかの端から、中央に向かってスワイプ</li>
                 </ul>
                 <p className="text-[11px] font-bold text-slate-600 mt-2 leading-relaxed">
-                  開いているメニュー → 全画面表示 → 教科書の画面 → 一覧 の順に、1つずつ戻ります。
+                  開いているメニュー → 全画面表示 → 教材の画面 → 一覧 の順に、1つずつ戻ります。
                   アプリが終了したり、ブラウザで別のページへ移動したりすることはありません。
                 </p>
               </div>
@@ -2580,14 +2863,14 @@ export default function App() {
             <div className="p-6 md:p-7">
               <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 mb-5 text-sm">
                 <div className="flex justify-between py-1"><span className="text-slate-500 font-bold">書き出し日時</span><span className="text-slate-700 font-bold">{importPreview.summary.exportedAt}</span></div>
-                <div className="flex justify-between py-1"><span className="text-slate-500 font-bold">教科書の数</span><span className="text-slate-700 font-bold">{importPreview.summary.tbCount} 冊</span></div>
+                <div className="flex justify-between py-1"><span className="text-slate-500 font-bold">教材の数</span><span className="text-slate-700 font-bold">{importPreview.summary.tbCount} 件</span></div>
                 <div className="flex justify-between py-1"><span className="text-slate-500 font-bold">合計ページ数</span><span className="text-slate-700 font-bold">{importPreview.summary.pageCount} ページ</span></div>
                 <div className="flex justify-between py-1"><span className="text-slate-500 font-bold">マイスタンプ</span><span className="text-slate-700 font-bold">{importPreview.summary.stampCount} 個</span></div>
               </div>
               <p className="text-xs font-bold text-slate-500 leading-relaxed mb-1">取り込み方法を選んでください。</p>
               <ul className="text-xs font-bold text-slate-500 leading-relaxed list-disc pl-5 mb-2">
-                <li><span className="text-emerald-700">追加で取り込む</span>: 今ある教科書はそのまま残ります（推奨）</li>
-                <li><span className="text-red-500">置き換える</span>: 現在のすべての教科書・書き込みが消えます</li>
+                <li><span className="text-emerald-700">追加で取り込む</span>: 今ある教材はそのまま残ります（推奨）</li>
+                <li><span className="text-red-500">置き換える</span>: 現在のすべての教材・書き込みが消えます</li>
               </ul>
             </div>
             <div className="bg-slate-50 px-6 py-4 flex flex-wrap justify-end gap-2 border-t border-slate-100">
@@ -2601,7 +2884,7 @@ export default function App() {
               <button
                 onClick={() => showConfirm(
                   "すべて置き換えますか？",
-                  "現在の教科書・書き込み・マイスタンプはすべて削除され、バックアップの内容に置き換わります。",
+                  "現在の教材・書き込み・マイスタンプはすべて削除され、バックアップの内容に置き換わります。",
                   () => applyImport('replace'),
                   "置き換える",
                   true
@@ -2664,6 +2947,29 @@ export default function App() {
         </div>
       )}
 
+      {/* 使うときの注意（著作権）。初回だけ出す。
+          データを受け取る側の画面と重ならないよう、共有中は出さない。 */}
+      {showUsageNotice && shareMode === 'none' && (
+        <div role="dialog" aria-modal="true" aria-label="使うときの注意" className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[550] p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 max-h-[90dvh] overflow-y-auto">
+            <div className="p-6 md:p-8">
+              <h3 className="font-bold text-xl mb-3 text-slate-800 flex items-center gap-2">
+                <AlertCircle className="text-amber-500" /> 使うときの注意
+              </h3>
+              <p className="text-slate-600 font-medium leading-relaxed mb-4">{COPYRIGHT_NOTICE}</p>
+              <p className="text-slate-500 font-bold text-xs leading-relaxed bg-slate-50 border border-slate-200 rounded-2xl p-3">
+                {APP_DISCLAIMER}
+              </p>
+            </div>
+            <div className="bg-slate-50 px-6 py-4 flex justify-end border-t border-slate-100">
+              <button onClick={acceptUsageNotice} className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 font-bold text-white rounded-xl transition-all shadow-lg shadow-amber-500/30">
+                わかりました
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* カスタム確認ダイアログ */}
       {dialog && (
         <div role="dialog" aria-modal="true" aria-label="かくにん" className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[300] p-4 animate-in fade-in duration-200">
@@ -2704,7 +3010,7 @@ export default function App() {
         </div>
       )}
 
-      {/* フッターもトップの教科書選択画面でのみ表示し、教科書画面は学習領域を最大化する */}
+      {/* フッターもトップの教材選択画面でのみ表示し、教材画面は学習領域を最大化する */}
       {!currentTextbookId && <Footer />}
     </div>
   );

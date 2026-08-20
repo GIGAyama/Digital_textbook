@@ -13,7 +13,7 @@ import './index.css'
  *
  * React の外で素の DOM として作っているのは、この帯を出す時点では
  * アプリ本体がどの画面を出しているか分からないため（起動直後にも
- * 教科書の編集中にも出うる）。どの画面の上にも同じように乗せられる。
+ * 教材の編集中にも出うる）。どの画面の上にも同じように乗せられる。
  */
 const showUpdateBanner = (onApply) => {
     if (document.getElementById('sw-update-banner')) return;

@@ -6,7 +6,16 @@
  */
 
 
-export const APP_NAME = "デジタル教科書メーカー";
+// 「デジタル教科書」は学校教育法第34条第2項に基づく制度上の呼び名で、
+// 検定教科書と結びついた「学習者用デジタル教科書」のことを指す。
+// このアプリは手元のPDFに書き込むだけの道具なので、その呼び名は表示に使わない。
+// 取り違えられないよう、画面にもドキュメントにも下の注記をそえる。
+export const APP_NAME = "教材プリントメーカー";
+export const APP_DISCLAIMER =
+  "本アプリは、学校教育法第34条第2項に定める「学習者用デジタル教科書」ではありません。教科書発行者とは関係のない、個人が作成した教材ビューアです。";
+// 取り込んでよい資料の範囲。初回だけ画面に出し、READMEにも同じ内容を書いてある。
+export const COPYRIGHT_NOTICE =
+  "取り込めるのは、自分で作った資料や、権利処理が済んでいる資料です。教科書・ドリル・ワークブックなど市販の教材を丸ごと取り込んで配ることは、著作権法第35条の範囲を超えます。";
 export const DEVELOPER_NAME = "GIGA山";
 export const SNS_LINK = "https://note.com/cute_borage86";
 
@@ -15,6 +24,8 @@ export const DB_KEY_DRAWINGS = "digital_textbook_drawings_v3";
 export const DB_KEY_MYSTAMPS = "digital_textbook_mystamps";
 export const DB_KEY_LAST_OPENED = "digital_textbook_last_opened";
 export const DB_KEY_VIEW_MODE = "digital_textbook_view_mode";
+// 著作権の注意を読んだかどうか（一度読んだら次からは出さない）
+export const DB_KEY_NOTICE_SEEN = "digital_textbook_notice_seen";
 
 export const BACKUP_FORMAT = "digital-textbook-backup";
 export const BACKUP_VERSION = 1;
@@ -45,6 +56,28 @@ export const DB_KEY_DRIVE_FILE_ID = "digital_textbook_drive_file_id";
 export const DB_KEY_DRIVE_AUTOSAVE = "digital_textbook_drive_autosave";
 export const DB_KEY_DRIVE_LAST_SYNC = "digital_textbook_drive_last_sync";
 
+// ==========================================
+// P2P共有（先生 → 児童生徒）の安全装置
+//
+// PeerJS が配る接続用のIDは、URLとQRコードに入って教室の外へも簡単に出ていく。
+// IDだけを頼りにすると、URLを手に入れた誰でも、何人でも受け取れてしまう。
+// そこで「合言葉」「有効期限」「人数の上限」の3つで受け渡しを囲う。
+// ==========================================
+
+// 合言葉に使う文字。見まちがえやすい 0/O と 1/I/L は入れない。
+export const SHARE_PASSCODE_CHARS = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+// 合言葉の文字数。板書して読み上げられる長さにする。
+// 31文字から5文字なので約2900万通り。1回の接続に3回までしか試せないので総当たりはできない。
+export const SHARE_PASSCODE_LENGTH = 5;
+// 合言葉を何回まちがえたら、その接続を切るか
+export const SHARE_MAX_AUTH_ATTEMPTS = 3;
+// 共有の有効期限（分）。授業1コマで配り終わる想定で30分を既定にする。
+export const SHARE_EXPIRY_OPTIONS = [10, 30, 60];
+export const SHARE_DEFAULT_EXPIRY_MIN = 30;
+// 配れる人数の上限。学級の規模に合わせて40人を既定にする。
+export const SHARE_MAX_RECEIVERS_OPTIONS = [5, 10, 40, 80];
+export const SHARE_DEFAULT_MAX_RECEIVERS = 40;
+
 export const COLORS = ['#000000', '#ef4444', '#3b82f6', '#22c55e', '#f59e0b'];
 export const STICKY_COLORS = ['#fff740', '#ffccff', '#ccffff', '#ccffcc'];
 
@@ -63,7 +96,7 @@ export const OBJECT_GRAB_MARGIN = 24;    // 選択中の図形のこの範囲(px
 // ここで決めた解像度が、そのまま「全端末での見え方の上限」になる。
 // P2P で別の端末に配ると、取り込んだ端末の解像度は当てにならないので、
 // 端末ごとの devicePixelRatio ではなく固定値にしてある。
-// 1.5 では 2倍表示の Chromebook・iPad で教科書の細い文字がぼやけた。
+// 1.5 では 2倍表示の Chromebook・iPad で教材の細い文字がぼやけた。
 // かといって 3 にすると1ページの面積が 4倍になり、メモリ4GBの Chromebook が
 // タブごと落ちる。2 あれば肉眼では十分きれいなので、ここで頭打ちにする。
 export const PDF_RENDER_SCALE = 2;
