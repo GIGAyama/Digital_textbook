@@ -449,4 +449,4 @@ PDF と書きこみを、先生の端末から子どもの端末へ**直接**送
 
 このマニュアルで解決しないことは、開発者までお知らせください。
 
-**GIGA山** — [https://note.com/cute_borage86](https://note.com/cute_borage86)
+**GIGA山** — [https://giga-school.com](https://giga-school.com)

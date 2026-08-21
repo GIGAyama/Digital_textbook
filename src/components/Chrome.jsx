@@ -4,7 +4,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import { Book, ChevronLeft, X, Play, Pause, RotateCcw } from 'lucide-react';
-import { APP_NAME, APP_DISCLAIMER, DEVELOPER_NAME, SNS_LINK } from '../constants.js';
+import { APP_NAME, APP_DISCLAIMER, DEVELOPER_NAME, HOMEPAGE_LINK } from '../constants.js';
 
 // ==========================================
 // 3. 共通UIコンポーネント (モダン化)
@@ -32,7 +32,7 @@ export const Header = ({ onGoHome, title }) => (
 // 編集画面では学習領域を最大化するため、スマホ等の小さな画面ではフッターを隠す
 export const Footer = ({ compact = false }) => (
   <footer className={`w-full bg-white border-t border-slate-200 py-1.5 text-center text-xs text-slate-500 font-bold shadow-sm shrink-0 z-20 ${compact ? 'hidden lg:block' : ''}`}>
-    &copy; {new Date().getFullYear()} {APP_NAME} <a href={SNS_LINK} target="_blank" rel="noopener noreferrer" className="text-inherit hover:text-inherit no-underline cursor-default">{DEVELOPER_NAME}</a>
+    &copy; {new Date().getFullYear()} {APP_NAME} <a href={HOMEPAGE_LINK} target="_blank" rel="noopener noreferrer" className="text-inherit hover:text-inherit no-underline cursor-default">{DEVELOPER_NAME}</a>
   </footer>
 );
 

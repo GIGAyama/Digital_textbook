@@ -387,7 +387,7 @@ Google ドライブ連携で要求するのは `https://www.googleapis.com/auth/
 
 **GIGA山**
 
-*   Note: [https://note.com/cute_borage86](https://note.com/cute_borage86 "null")
+*   ホームページ: [https://giga-school.com](https://giga-school.com "null")
 
 ## 📄 ライセンス
 
