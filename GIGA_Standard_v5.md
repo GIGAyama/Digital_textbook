@@ -1124,7 +1124,7 @@ Q3. 画面10個以上／状態が複雑／アニメ多い？     → YES 【B型
 - 固定フッター
   ```html
   <footer class="text-center text-muted py-3 mt-4 border-top">
-    <small>© 2026 {アプリ名} <a href="https://note.com/cute_borage86" target="_blank"
+    <small>© 2026 {アプリ名} <a href="https://giga-school.com" target="_blank"
       rel="noopener" class="tap-44 d-inline-block text-decoration-none text-muted">GIGA山</a></small>
   </footer>
   ```
