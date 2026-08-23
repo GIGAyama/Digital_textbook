@@ -1,3 +1,4 @@
+import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -119,4 +120,24 @@ export default defineConfig({
         }),
     ],
     base: BASE,
+    build: {
+        rollupOptions: {
+            // プライバシーポリシーと利用規約を、ビルドの入口として明示する。
+            //
+            // Vite は既定で index.html しか入口として扱わない。
+            // privacy.html と terms.html をリポジトリ直下に置いただけでは
+            // dist に入らず、公開先（GitHub Pages）では 404 になる。
+            // さらに Service Worker の navigateFallback が index.html を
+            // 返すため、404 のかわりにアプリ本体が開いてしまい、
+            // giga-school.com からの「プライバシーポリシー」「利用規約」の
+            // リンクがアプリのページに化けていた。
+            // ここに並べておくと dist に出力され、precache にも入るので、
+            // 圏外でも規約を読める。
+            input: {
+                index: fileURLToPath(new URL('./index.html', import.meta.url)),
+                privacy: fileURLToPath(new URL('./privacy.html', import.meta.url)),
+                terms: fileURLToPath(new URL('./terms.html', import.meta.url)),
+            },
+        },
+    },
 })
