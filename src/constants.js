@@ -18,6 +18,9 @@ export const COPYRIGHT_NOTICE =
   "取り込めるのは、自分で作った資料や、権利処理が済んでいる資料です。教科書・ドリル・ワークブックなど市販の教材を丸ごと取り込んで配ることは、著作権法第35条の範囲を超えます。";
 export const DEVELOPER_NAME = "GIGA山";
 export const HOMEPAGE_LINK = "https://giga-school.com";
+// このアプリの紹介記事。つくった理由・導入の手順・画面ごとの使い方がある。
+// HOMEPAGE_LINK はトップに行くので、そこからだと 38 本の中から探し直すことになる。
+export const ARTICLE_LINK = "https://giga-school.com/apps/digital-textbook/";
 
 export const DB_KEY_TEXTBOOKS = "digital_textbooks_v3";
 export const DB_KEY_DRAWINGS = "digital_textbook_drawings_v3";
