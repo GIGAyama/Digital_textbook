@@ -69,7 +69,23 @@ export default defineConfig({
                 ],
             },
             workbox: {
-                globPatterns: ['**/*.{js,css,html,png,svg,ico,webmanifest}'],
+                // ⚠️ woff2 を必ず入れること。自己ホストにしたので、ここから漏れると
+        //    「オフラインでは端末フォントに落ちる」が、画面は出るので気づけない。
+        globPatterns: ['**/*.{js,css,html,png,svg,ico,webmanifest}'],
+        // 書体は先読みに入れない。入れると先読みが 1MB を超え、校内 Wi-Fi で
+        // 40 台が同時に開いたときに初回表示が止まる。画面が出れば必ず取りにいくので、
+        // その 1 回でここに入る。2 回目からはオフラインでも同じように出る。
+        runtimeCaching: [
+          {
+            urlPattern: ({ request, sameOrigin }) => sameOrigin && request.destination === 'font',
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'self-hosted-fonts',
+              cacheableResponse: { statuses: [0, 200] },
+              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 },
+            },
+          },
+        ],
                 // vendor/ は合計2MBある。ここを先読みキャッシュに入れると
                 // 初回アクセスで2MBを一気に取りに行き、40人が同時に開く
                 // 校内Wi-Fiでは表示が止まる。実際に使う時点で取りに行き、
