@@ -69,6 +69,8 @@ export default defineConfig({
                 ],
             },
             workbox: {
+                // 書体（woff2）は先読みに入れない。vendor/ と同じ理由で、
+                // 実際に画面が出た時点で取りにいき、下の runtimeCaching が控えを持つ。
                 globPatterns: ['**/*.{js,css,html,png,svg,ico,webmanifest}'],
                 // vendor/ は合計2MBある。ここを先読みキャッシュに入れると
                 // 初回アクセスで2MBを一気に取りに行き、40人が同時に開く
@@ -96,22 +98,20 @@ export default defineConfig({
                         },
                     },
                     {
-                        // 日本語フォントは Google Fonts の unicode-range 分割に任せている。
-                        // 自前で持つと全字形で数MBになり、逆にサブセットを切ると
-                        // 児童が入力した漢字が豆腐（□）になる恐れがあるため。
-                        urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-                        handler: 'StaleWhileRevalidate',
-                        options: {
-                            cacheName: 'google-fonts-stylesheets',
-                            expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
-                        },
-                    },
-                    {
-                        urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+                        // 自分のところから配る書体。先読みには入れず、画面が出た時点で
+                        // 取りにきたものをここで控える。2 回目からはオフラインでも出る。
+                        //
+                        // ⚠️ 以前ここには Google Fonts の規則が 2 本あり、
+                        //    「自前で持つとサブセットを切ったときに豆腐（□）になる恐れ」と
+                        //    書いてあった。実際には Google が返す unicode-range をそのまま
+                        //    使うので、収録外の字は端末内蔵フォントへ落ちるだけで
+                        //    豆腐にはならない。読む先が無くなったので規則ごと消した。
+                        urlPattern: ({ request, sameOrigin }) =>
+                            sameOrigin && request.destination === 'font',
                         handler: 'CacheFirst',
                         options: {
-                            cacheName: 'google-fonts-webfonts',
-                            expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 365 },
+                            cacheName: 'self-hosted-fonts',
+                            expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 },
                             cacheableResponse: { statuses: [0, 200] },
                         },
                     },
