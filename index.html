@@ -26,8 +26,8 @@
   <meta http-equiv="Content-Security-Policy" content="
       default-src 'self';
       script-src 'self' https://accounts.google.com;
-      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-      font-src 'self' https://fonts.gstatic.com data:;
+      style-src 'self' 'unsafe-inline';
+      font-src 'self' data:;
       img-src 'self' data: blob:;
       media-src 'self' https: data: blob:;
       connect-src 'self' data: blob: https://www.googleapis.com https://accounts.google.com https://0.peerjs.com wss://0.peerjs.com;
@@ -57,10 +57,9 @@
   <meta property="og:image:alt" content="GIGA school｜学校で使える Web アプリ">
   <meta name="twitter:card" content="summary_large_image">
 
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&display=swap"
-    rel="stylesheet" />
+  <!-- 書体は自分のところから配る（生成物。node tools/fonts/build-fonts.mjs で作り直す）。
+       ここに Google Fonts への link を戻さないこと。学校のフィルタが
+       塞ぐと書体が当たらず、塞ぎ方によっては画面そのものが出ない。 -->
 
   <meta name="theme-color" content="#f59e0b" />
   <!-- 児童用アプリなので配色は固定する（端末のダークモードで色が反転すると混乱する） -->
@@ -78,8 +77,8 @@
   <meta name="apple-mobile-web-app-title" content="教材メーカー" />
 
   <title>教材プリントメーカー（学習者用デジタル教科書ではありません）</title>
-  <script type="module" crossorigin src="./assets/index-B-vG1517.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-i68CJBsC.css">
+  <script type="module" crossorigin src="./assets/index-C8bngERA.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-Ct7_0sKh.css">
 <link rel="manifest" href="./manifest.webmanifest"></head>
 
 <body>
