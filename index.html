@@ -83,6 +83,23 @@
 
 <body>
   <div id="root"></div>
+
+  <!-- 利用規約・プライバシーへの行き先。中身は正本の部品
+       standards/web/giga-app-links.js（配布物 public/giga-app-links.js）が出す。
+       文言も並びも行き先も、あちらで決まっている。手で書かないこと。
+
+       ⚠️ 置き場所の <div data-giga-links> を Chrome.jsx の <Footer> に置かない。
+          あのフッターは App.jsx:3014 で {!currentTextbookId && <Footer />} と
+          書かれていて、教材を開くと React ごと消える。部品は置き場所を
+          一度見つけたら見張りをやめるので、そこへ置くと「教材を 1 回開いたら
+          リンクが二度と戻らない」ことになる。
+          #root の外に出しておけば React の描き替えに巻きこまれない。
+
+       ⚠️ data-links で「つかいかた」を外してある。このアプリにはまだ
+          docs/manual/ が無く、既定のまま出すと行き止まりのリンクになる。
+          マニュアルを書いたら、この属性ごと消すこと。 -->
+  <script src="./giga-app-links.js" data-links="terms,privacy" defer></script>
+
 </body>
 
 </html>
