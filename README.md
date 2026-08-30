@@ -18,7 +18,7 @@
 PDFファイルをブラウザに読み込ませるだけで、ペンやマーカーによる書き込み、ふせんの貼り付け、豊富な「教育用スタンプ」の配置が可能になります。さらに、**WebRTC（P2P通信）技術**を採用しており、クラウドサーバーを経由せずに先生の端末から児童生徒の端末へ直接データを共有（配布）できます。
 
 **公開先**: [https://digital-textbook.giga-school.com/](https://digital-textbook.giga-school.com/)
-**先生向けの使い方**: [MANUAL.md](./MANUAL.md)
+**先生向けの使い方**: [docs/manual/manual.md](./docs/manual/manual.md)（画面写真つき・全18章。公開ページ [giga-school.com/apps/digital-textbook/manual/](https://giga-school.com/apps/digital-textbook/manual/) の元になります）／[MANUAL.md](./MANUAL.md)（これまでの版）
 
 ## 🧭 このアプリでできること（全体像）
 
@@ -227,7 +227,8 @@ quality.config.json           品質ゲートの設定
 AUDIT.md                      GIGA Standard v4 の監査記録
 ROLLOUT.md                    他リポジトリへ展開できる知見の記録
 GOOGLE_DRIVE_SETUP.md         Googleドライブ連携の設定手順
-MANUAL.md                     先生向けマニュアル
+MANUAL.md                     先生向けマニュアル（これまでの版）
+docs/manual/                  使い方マニュアルの正本（manual.md ＋ images/。ポータルが取りこむ）
 docs/note/                    紹介記事の原稿
 ```
 
